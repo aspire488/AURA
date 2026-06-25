@@ -1,0 +1,83 @@
+{
+  "nodes": [
+    {
+      "id": "auraServiceMonitor",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "parameters": {
+        "interval": "everyMinute",
+        "timeZone": "Europe/Berlin"
+      },
+      "startNode": true
+    },
+    {
+      "id": "checkDocker",
+      "name": "Check Docker",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "parameters": {
+        "command": "docker",
+        "arguments": "ps --format \"{{.Names}}|{{.Status}}\""
+      }
+    },
+    {
+      "id": "parseServices",
+      "name": "Parse Services",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "parameters": {
+        "functionCode": "const lines = $input.item.json.stdout.split('\n');\nconst services = [];\nfor (const line of lines) {\n  if (line.trim() === '') continue;\n  const parts = line.split('|');\n  if (parts.length === 2) {\n    services.push({\n      name: parts[0],\n      status: parts[1]\n    });\n  }\n}\nreturn [{ json: { services: services } }];"
+      }
+    },
+    {
+      "id": "healthEvaluation",
+      "name": "Health Evaluation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "parameters": {
+        "functionCode": "const requiredServices = ['aura-redis', 'aura-neo4j', 'aura-chromadb', 'aura-n8n'];\nconst parsedServices = $input.item.json.services;\n\nconst failedServices = [];\nlet allHealthy = true;\n\nfor (const requiredService of requiredServices) {\n  const foundService = parsedServices.find(s => s.name === requiredService);\n  if (!foundService || !foundService.status.startsWith('Up ')) {\n    allHealthy = false;\n    failedServices.push(requiredService);\n  }\n}\n\nconst timestamp = new Date().toISOString();\nlet output = {};\n\nif (allHealthy) {\n  output = {\n    status: 'HEALTHY',\n    timestamp: timestamp\n  };\n} else {\n  output = {\n    status: 'DEGRADED',\n    failedServices: failedServices,\n    timestamp: timestamp\n  };\n}\n\nreturn [{ json: output }];"
+      }
+    }
+  ],
+  "connections": {
+    "auraServiceMonitor": [
+      {
+        "node": "checkDocker",
+        "type": "main",
+        "index": 0
+      }
+    ],
+    "checkDocker": [
+      {
+        "node": "parseServices",
+        "type": "main",
+        "index": 0
+      }
+    ],
+    "parseServices": [
+      {
+        "node": "healthEvaluation",
+        "type": "main",
+        "index": 0
+      }
+    ]
+  },
+  "name": "AURA Service Monitor",
+  "active": false,
+  "staticData": null,
+  "settings": {
+    "workflowMetaData": {
+      "id": "AURA_SERVICE_MONITOR",
+      "name": "AURA Service Monitor",
+      "description": "Monitors AURA services via Docker and reports health status.",
+      "version": 1
+    }
+  },
+  "triggerCount": 0,
+  "forcedExit": false,
+  "saveData": [],
+  "createdAt": "2026-06-22T12:00:00.000Z",
+  "updatedAt": "2026-06-22T12:00:00.000Z",
+  "id": "AURA_SERVICE_MONITOR"
+}

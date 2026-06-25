@@ -1,0 +1,57 @@
+services:
+  redis:
+    image: redis:7
+    container_name: aura-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+
+  neo4j:
+    image: neo4j:5
+    container_name: aura-neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/aura12345
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: aura-chromadb
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data/chromadb:/chroma/chroma
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: aura-n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      GENERIC_TIMEZONE: Asia/Kolkata
+      N8N_SECURE_COOKIE: "false"
+    volumes:
+      - ./data/n8n:/home/node/.n8n
+      - ./imports:/imports
+
+  backend:
+    build: ./backend
+    container_name: aura-backend
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      AURA_CHROMA_HOST: aura-chromadb
+      AURA_CHROMA_PORT: "8000"
+      AURA_REDIS_HOST: aura-redis
+      AURA_REDIS_PORT: "6379"
+      AURA_OPENAI_API_KEY: "${AURA_OPENAI_API_KEY:-}"
+      AURA_OPENROUTER_API_KEY: "${AURA_OPENROUTER_API_KEY:-}"
+    volumes:
+      - ./imports:/imports

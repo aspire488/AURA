@@ -1,0 +1,49 @@
+providers:
+
+  nvidia:
+    enabled: true
+    api_key_env: NVIDIA_API_KEY
+
+tasks:
+
+  knowledge:
+    providers:
+      - nvidia
+
+  reasoning:
+    providers:
+      - nvidia
+
+  coding:
+    providers:
+      - nvidia
+
+  audit:
+    providers:
+      - nvidia
+
+fallbacks:
+
+  knowledge:
+    - qwen/qwen3.5-122b-a10b
+    - openai/gpt-oss-120b
+    - deepseek-ai/deepseek-v4-pro
+    - nvidia/llama-3.3-nemotron-super-49b-v1
+
+  reasoning:
+    - openai/gpt-oss-120b
+    - qwen/qwen3.5-122b-a10b
+    - nvidia/nemotron-3-super-120b-a12b
+
+  coding:
+    - deepseek-ai/deepseek-v4-pro
+    - qwen/qwen3.5-122b-a10b
+    - openai/gpt-oss-120b
+
+  audit:
+    - nvidia/nemotron-3-super-120b-a12b
+    - openai/gpt-oss-120b
+    - qwen/qwen3.5-122b-a10b
+
+  embeddings:
+    - nvidia/nv-embedqa-e5-v5
