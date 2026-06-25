@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 import logging
 from dataclasses import dataclass, field
@@ -14,6 +15,9 @@ from app.intelligence.validator import validate_response
 from app.runtime.memory_adapter import MemoryAdapter
 from app.runtime.provider_adapter import ProviderAdapter
 from app.runtime.session_manager import SessionManager
+from app.runtime.tool_planner import plan_tool
+from app.runtime.tool_registry import registry
+from app.runtime.agent_state import get_agent_state
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +89,46 @@ class KIOAdapter:
 
         # 2. Query type
         query_type = classify_query(request.query)
+
+        # 2b. Tool check — if a tool matches, execute and return early
+        tool_name = plan_tool(request.query)
+        if tool_name:
+            try:
+                # Track active tool in agent state. ponytail: best-effort, ignore errors.
+                if session_id:
+                    try:
+                        agent = get_agent_state()
+                        await agent.set_active_tools(session_id, [tool_name])
+                    except Exception:
+                        pass
+                # ponytail: extract args inline, no arg parser
+                kwargs: dict = {}
+                if tool_name == "filesystem":
+                    m = re.search(r"\bread (?:file |the )?(.+)", request.query.lower())
+                    kwargs["path"] = m.group(1).strip() if m else "."
+                elif tool_name == "list_directory":
+                    m = re.search(r"\b(?:in |to |at )(.+)", request.query.lower())
+                    kwargs["path"] = m.group(1).strip() if m else "."
+                elif tool_name == "http":
+                    m = re.search(r"(https?://\S+)", request.query)
+                    kwargs["url"] = m.group(1) if m else ""
+
+                result = await registry.execute(tool_name, **kwargs)
+                # Clear active tools. ponytail: best-effort.
+                if session_id:
+                    try:
+                        await agent.set_active_tools(session_id, [])
+                    except Exception:
+                        pass
+                latency = round((time.perf_counter() - start) * 1000, 2)
+                if sessions and session_id:
+                    await sessions.append_message(session_id, "assistant", str(result))
+                return KIOResponse(
+                    intent=intent, query_type=query_type, answer=str(result),
+                    citations=[], warnings=[], session_id=session_id, latency_ms=latency,
+                )
+            except Exception as e:
+                logger.warning("Tool %s failed: %s, falling through to LLM", tool_name, e)
 
         # 3. Embed
         embeddings = await provider.embed([request.query])

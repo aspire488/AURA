@@ -21,6 +21,14 @@ class RetrievalMetrics:
     total_prompt_tokens: int = 0
     total_completion_tokens: int = 0
     validation_failures: int = 0
+    # Task metrics. ponytail: counters, same lock.
+    active_tasks: int = 0
+    completed_tasks: int = 0
+    cancelled_tasks: int = 0
+    resumed_tasks: int = 0
+    total_task_latency_ms: float = 0.0
+    total_tools_per_task: int = 0
+    task_count: int = 0
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def record_retrieval(self, score: float, latency_ms: float, hit: bool = True) -> None:
@@ -54,10 +62,32 @@ class RetrievalMetrics:
             if not validation_valid:
                 self.validation_failures += 1
 
+    def record_task_created(self) -> None:
+        with self._lock:
+            self.active_tasks += 1
+
+    def record_task_completed(self, latency_ms: float, tools_used: int) -> None:
+        with self._lock:
+            self.active_tasks = max(0, self.active_tasks - 1)
+            self.completed_tasks += 1
+            self.task_count += 1
+            self.total_task_latency_ms += latency_ms
+            self.total_tools_per_task += tools_used
+
+    def record_task_cancelled(self) -> None:
+        with self._lock:
+            self.active_tasks = max(0, self.active_tasks - 1)
+            self.cancelled_tasks += 1
+
+    def record_task_resumed(self) -> None:
+        with self._lock:
+            self.resumed_tasks += 1
+
     def snapshot(self) -> dict:
         with self._lock:
             ret_count = self.retrieval_count or 1
             reason_count = self.reasoning_count or 1
+            task_count = self.task_count or 1
             return {
                 "retrieval_count": self.retrieval_count,
                 "hit_count": self.hit_count,
@@ -72,6 +102,13 @@ class RetrievalMetrics:
                 "total_prompt_tokens": self.total_prompt_tokens,
                 "total_completion_tokens": self.total_completion_tokens,
                 "validation_failures": self.validation_failures,
+                # Task metrics
+                "active_tasks": self.active_tasks,
+                "completed_tasks": self.completed_tasks,
+                "cancelled_tasks": self.cancelled_tasks,
+                "resumed_tasks": self.resumed_tasks,
+                "average_task_latency_ms": round(self.total_task_latency_ms / task_count, 2),
+                "average_tools_per_task": round(self.total_tools_per_task / task_count, 2),
             }
 
 

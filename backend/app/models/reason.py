@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 class ReasonRequest(BaseModel):
     query: str
+    session_id: str = ""
 
 
 class ReasonResponse(BaseModel):
@@ -12,3 +13,5 @@ class ReasonResponse(BaseModel):
     citations: list[str]
     warnings: list[str]
     latency_ms: float
+    session_id: str = ""
+    task_id: str = ""

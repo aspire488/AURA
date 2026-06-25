@@ -1,15 +1,62 @@
+import time
+
 from fastapi import APIRouter
 
 from app.models.reason import ReasonRequest, ReasonResponse
 from app.runtime.kio_adapter import kio, KIORequest
+from app.runtime.task_manager import get_task_manager, TaskStatus
+from app.runtime.agent_state import get_agent_state
+from app.runtime.tool_planner import classify_plan
+from app.intelligence.metrics import metrics
 
 router = APIRouter(tags=["reasoning"])
 
 
 @router.post("/reason", response_model=ReasonResponse)
 async def reason_endpoint(body: ReasonRequest):
-    request = KIORequest(query=body.query)
+    session_id = body.session_id
+    tm = get_task_manager()
+    agent = get_agent_state()
+
+    # Check for resumeable task
+    task = None
+    if session_id:
+        task = await tm.resume_last_task(session_id)
+        if task:
+            metrics.record_task_resumed()
+            await agent.set_task(session_id, task.task_id)
+
+    # Create new task if none resumed
+    if not task:
+        plan_type = classify_plan(body.query)
+        steps = [body.query]  # ponytail: single step, split on 'then' handled by planner
+        status = TaskStatus.deferred if plan_type == "deferred" else TaskStatus.running
+        task = await tm.create(session_id=session_id or "anon", query=body.query, steps=steps, status=status)
+        metrics.record_task_created()
+        if session_id:
+            await agent.set_task(session_id, task.task_id)
+            await agent.set_reasoning_mode(session_id, plan_type)
+
+    # Skip execution for deferred tasks
+    if task.status == TaskStatus.deferred:
+        return ReasonResponse(
+            intent="deferred", query_type="deferred",
+            answer=f"Task stored. Resume it later with /tasks/{task.task_id}/resume.",
+            citations=[], warnings=[], latency_ms=0,
+            session_id=session_id, task_id=task.task_id,
+        )
+
+    # Execute through KIO pipeline
+    start = time.perf_counter()
+    request = KIORequest(query=body.query, session_id=session_id)
     result = await kio.process_request(request)
+    latency_ms = round((time.perf_counter() - start) * 1000, 2)
+
+    # Mark complete
+    await tm.complete(task.task_id, result=result.answer)
+    tools_used = len(result.citations)  # proxy for tools used
+    metrics.record_task_completed(latency_ms, tools_used)
+
     return ReasonResponse(
         intent=result.intent,
         query_type=result.query_type,
@@ -17,4 +64,6 @@ async def reason_endpoint(body: ReasonRequest):
         citations=result.citations,
         warnings=result.warnings,
         latency_ms=result.latency_ms,
+        session_id=result.session_id or session_id,
+        task_id=task.task_id,
     )
