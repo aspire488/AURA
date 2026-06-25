@@ -56,13 +56,3 @@ class SessionManager:
         await client.rpush(key, message)
         await client.ltrim(key, -MAX_HISTORY, -1)
         await client.expire(key, SESSION_TTL)
-
-    async def get_history(self, session_id: str, limit: int = 20) -> list[dict]:
-        client = self._redis.client
-        raw = await client.lrange(HISTORY_KEY.format(sid=session_id), -limit, -1)
-        return [json.loads(m) for m in raw] if raw else []
-
-    async def touch(self, session_id: str) -> None:
-        client = self._redis.client
-        await client.expire(HISTORY_KEY.format(sid=session_id), SESSION_TTL)
-        await client.expire(META_KEY.format(sid=session_id), SESSION_TTL)

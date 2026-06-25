@@ -142,16 +142,6 @@ class TaskManager:
         await self.update(task)
         return task
 
-    async def list_active(self, session_id: str) -> list[Task]:
-        client = self._redis.client
-        task_ids = await client.smembers(SESSION_TASKS_KEY.format(sid=session_id))
-        tasks = []
-        for tid in task_ids:
-            task = await self.get(tid)
-            if task and task.status in (TaskStatus.pending, TaskStatus.running, TaskStatus.deferred):
-                tasks.append(task)
-        return tasks
-
     async def list_all(self, session_id: str) -> list[Task]:
         client = self._redis.client
         task_ids = await client.smembers(SESSION_TASKS_KEY.format(sid=session_id))

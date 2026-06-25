@@ -1,6 +1,6 @@
 import time
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 from app.models.reason import ReasonRequest, ReasonResponse
 from app.runtime.kio_adapter import kio, KIORequest
@@ -8,13 +8,21 @@ from app.runtime.task_manager import get_task_manager, TaskStatus
 from app.runtime.agent_state import get_agent_state
 from app.runtime.tool_planner import classify_plan, plan_steps
 from app.intelligence.metrics import metrics
+from app.core.logging import session_id_var, task_id_var
 
 router = APIRouter(tags=["reasoning"])
 
 
-@router.post("/reason", response_model=ReasonResponse)
-async def reason_endpoint(body: ReasonRequest):
+@router.post("/reason")
+async def reason_endpoint(body: ReasonRequest, request: Request):
     session_id = body.session_id
+    session_id_var.set(session_id)
+
+    # Streaming path
+    if body.stream:
+        from app.core.streaming import stream_reason_response
+        return await stream_reason_response(body.query, session_id)
+
     tm = get_task_manager()
     agent = get_agent_state()
 
@@ -37,6 +45,8 @@ async def reason_endpoint(body: ReasonRequest):
             await agent.set_task(session_id, task.task_id)
             await agent.set_reasoning_mode(session_id, plan_type)
 
+    task_id_var.set(task.task_id)
+
     # Skip execution for deferred tasks
     if task.status == TaskStatus.deferred:
         return ReasonResponse(
@@ -49,19 +59,18 @@ async def reason_endpoint(body: ReasonRequest):
     # Execute through KIO pipeline (handles multi-step via execution engine)
     start = time.perf_counter()
     start_from = task.current_step if task.status == TaskStatus.running else 0
-    request = KIORequest(
+    req = KIORequest(
         query=body.query,
         session_id=session_id,
         task_id=task.task_id,
         start_from=start_from,
     )
-    result = await kio.process_request(request)
+    result = await kio.process_request(req)
     latency_ms = round((time.perf_counter() - start) * 1000, 2)
 
     # Persist execution trace
     if result.execution_trace:
         for entry in result.execution_trace:
-            # Only persist entries not already in the task trace
             if len(task.execution_trace) <= entry.get("index", 0):
                 await tm.record_step(task.task_id, entry["index"], entry.get("output", ""), entry)
 

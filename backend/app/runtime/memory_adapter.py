@@ -7,7 +7,6 @@ from app.core.dependencies import get_chroma, get_redis
 from app.intelligence.deduplicator import content_hash
 from app.intelligence.memory_classifier import classify_memory
 from app.intelligence.memory_ranker import score_importance
-from app.intelligence.summarizer import summarize_conversation
 from app.intelligence.metrics import metrics
 from app.services.chroma_service import ChromaService
 from app.services.redis_service import RedisService
@@ -78,41 +77,3 @@ class MemoryAdapter:
 
         metrics.record_store(is_duplicate=False)
         return {"status": "stored", "memory_type": memory_type, "importance": importance}
-
-    def retrieve(self, embedding: list[float], top_k: int = 10) -> list[dict]:
-        return self._chroma.query(embedding, top_k=top_k)
-
-    def retrieve_by_keyword(self, query: str, top_k: int = 10) -> list[dict]:
-        return self._chroma.keyword_search(query, top_k=top_k)
-
-    def retrieve_by_conversation(self, conversation_id: str) -> list[dict]:
-        return self._chroma.get_by_conversation_id(conversation_id)
-
-    def summarize_conversation(self, conversation_id: str) -> dict:
-        chunks = self._chroma.get_by_conversation_id(conversation_id)
-        return summarize_conversation(chunks)
-
-    def stats(self) -> dict:
-        all_chunks = self._chroma.get_all_metadata()
-        total = len(all_chunks)
-        conversations = {c.get("conversation_id", "") for c in all_chunks}
-        lengths = [len(c.get("text", "")) for c in all_chunks]
-        type_counts = {"short_term": 0, "long_term": 0, "ephemeral": 0}
-        timestamps = []
-        for c in all_chunks:
-            mt = c.get("memory_type", "")
-            if mt in type_counts:
-                type_counts[mt] += 1
-            ts = c.get("timestamp", "")
-            if ts:
-                timestamps.append(ts)
-        return {
-            "total_chunks": total,
-            "total_conversations": len(conversations),
-            "short_term": type_counts["short_term"],
-            "long_term": type_counts["long_term"],
-            "ephemeral": type_counts["ephemeral"],
-            "average_chunk_length": round(sum(lengths) / max(total, 1), 1),
-            "oldest_memory": min(timestamps) if timestamps else "",
-            "newest_memory": max(timestamps) if timestamps else "",
-        }

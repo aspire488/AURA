@@ -50,6 +50,12 @@ def plan_tool(query: str) -> str | None:
     if re.search(r"\bhttps?://\S+", lower):
         return "http"
 
+    # Code execution — ponytail: regex only, no LLM routing.
+    if re.search(r"\b(?:run|execute|exec) python\b", lower):
+        return "run_python"
+    if re.search(r"\bpwd\b", lower):
+        return "working_directory"
+
     # Browser
     if re.search(r"\b(?:close|close tab)\b", lower):
         return "browser_close_tab"
@@ -79,6 +85,11 @@ def extract_tool_args(tool_name: str, query: str) -> dict:
     if tool_name == "http":
         m = re.search(r"(https?://\S+)", query)
         return {"url": m.group(1) if m else ""}
+    if tool_name == "run_python":
+        m = re.search(r"\b(?:run|execute|exec) python[:\s]+(.+)", query, re.DOTALL)
+        return {"code": m.group(1).strip() if m else ""}
+    if tool_name == "working_directory":
+        return {}
 
     # Browser tools
     if tool_name == "browser_open_url":

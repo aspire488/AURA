@@ -40,6 +40,17 @@ class RetrievalMetrics:
     browser_requests: int = 0
     browser_failures: int = 0
     browser_latency_ms: float = 0.0
+    # Code execution metrics. ponytail: extend existing, same lock.
+    code_requests: int = 0
+    code_failures: int = 0
+    code_latency_ms: float = 0.0
+    # Provider resilience metrics. ponytail: extend existing, same lock.
+    provider_failures: int = 0
+    provider_fallbacks: int = 0
+    # Request metrics. ponytail: extend existing, same lock.
+    active_requests: int = 0
+    stream_requests: int = 0
+    rate_limit_hits: int = 0
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def record_retrieval(self, score: float, latency_ms: float, hit: bool = True) -> None:
@@ -116,6 +127,38 @@ class RetrievalMetrics:
             if not success:
                 self.browser_failures += 1
 
+    def record_code(self, latency_ms: float, success: bool) -> None:
+        """Record code execution. ponytail: extend existing metrics."""
+        with self._lock:
+            self.code_requests += 1
+            self.code_latency_ms += latency_ms
+            if not success:
+                self.code_failures += 1
+
+    def record_provider_failure(self) -> None:
+        with self._lock:
+            self.provider_failures += 1
+
+    def record_provider_fallback(self) -> None:
+        with self._lock:
+            self.provider_fallbacks += 1
+
+    def record_request_start(self) -> None:
+        with self._lock:
+            self.active_requests += 1
+
+    def record_request_end(self) -> None:
+        with self._lock:
+            self.active_requests = max(0, self.active_requests - 1)
+
+    def record_stream_request(self) -> None:
+        with self._lock:
+            self.stream_requests += 1
+
+    def record_rate_limit_hit(self) -> None:
+        with self._lock:
+            self.rate_limit_hits += 1
+
     def snapshot(self) -> dict:
         with self._lock:
             ret_count = self.retrieval_count or 1
@@ -154,6 +197,17 @@ class RetrievalMetrics:
                 "browser_requests": self.browser_requests,
                 "browser_failures": self.browser_failures,
                 "average_browser_latency_ms": round(self.browser_latency_ms / max(self.browser_requests, 1), 2),
+                # Code execution metrics
+                "code_requests": self.code_requests,
+                "code_failures": self.code_failures,
+                "average_code_latency_ms": round(self.code_latency_ms / max(self.code_requests, 1), 2),
+                # Provider resilience
+                "provider_failures": self.provider_failures,
+                "provider_fallbacks": self.provider_fallbacks,
+                # Request metrics
+                "active_requests": self.active_requests,
+                "stream_requests": self.stream_requests,
+                "rate_limit_hits": self.rate_limit_hits,
             }
 
 

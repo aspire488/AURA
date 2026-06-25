@@ -1,3 +1,6 @@
+from pathlib import Path
+from urllib.parse import urlparse
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -20,9 +23,15 @@ class Settings(BaseSettings):
     openrouter_embedding_model: str = "openai/text-embedding-3-small"
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
 
-    # Added for substrate lifecycle
     postgres_url: str = ""
     filesystem_root: str = "/var/aura"
+
+    # Provider resilience. ponytail: comma-separated priority list.
+    provider_priority: str = "openai,openrouter"
+    provider_timeout_seconds: float = 30.0
+
+    # Rate limiting
+    rate_limit_rpm: int = 60
 
     def validate_settings(self):
         errors = []
@@ -32,5 +41,44 @@ class Settings(BaseSettings):
             errors.append(f"Invalid AURA_REDIS_PORT: {self.redis_port}")
         if errors:
             raise ValueError("Configuration error: " + "; ".join(errors))
+
+    async def validate_runtime(self) -> list[str]:
+        """Async startup checks. ponytail: fail-fast on bad config."""
+        errors = []
+
+        # filesystem_root
+        root = Path(self.filesystem_root)
+        if not root.exists():
+            try:
+                root.mkdir(parents=True, exist_ok=True)
+            except OSError as e:
+                errors.append(f"filesystem_root {self.filesystem_root} not accessible: {e}")
+
+        # Provider URLs
+        for name, url in [("openai", self.openai_base_url), ("openrouter", self.openrouter_base_url)]:
+            parsed = urlparse(url)
+            if parsed.scheme not in ("http", "https"):
+                errors.append(f"{name} URL invalid: {url}")
+
+        # Redis
+        try:
+            import redis.asyncio as aioredis
+            client = aioredis.Redis(host=self.redis_host, port=self.redis_port, socket_timeout=3)
+            await client.ping()
+            await client.aclose()
+        except Exception as e:
+            errors.append(f"Redis unreachable at {self.redis_host}:{self.redis_port}: {e}")
+
+        # Chroma
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                resp = await client.get(f"http://{self.chroma_host}:{self.chroma_port}/api/v1/heartbeat")
+                if resp.status_code >= 500:
+                    errors.append(f"Chroma unhealthy at {self.chroma_host}:{self.chroma_port}")
+        except Exception as e:
+            errors.append(f"Chroma unreachable at {self.chroma_host}:{self.chroma_port}: {e}")
+
+        return errors
 
 settings = Settings()

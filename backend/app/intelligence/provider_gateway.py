@@ -21,14 +21,20 @@ class LLMResponse:
 
 
 class ProviderGateway:
-    """Single interface for all LLM calls.
+    """Single interface for all LLM calls with automatic fallback.
 
     ponytail: httpx direct call, no SDK dependency.
-    Handles OpenAI and OpenRouter (same API shape).
+    Tries providers in priority order on failure.
     """
 
     def __init__(self):
-        self._client = httpx.AsyncClient(timeout=60.0)
+        self._client = httpx.AsyncClient(timeout=settings.provider_timeout_seconds)
+        self._provider_failures: dict[str, int] = {}
+        self._provider_fallbacks: int = 0
+
+    def _get_priority_list(self) -> list[str]:
+        """Return provider names in priority order. ponytail: comma-separated config."""
+        return [p.strip() for p in settings.provider_priority.split(",") if p.strip()]
 
     async def complete(
         self,
@@ -38,18 +44,40 @@ class ProviderGateway:
         temperature: float = 0.3,
         max_tokens: int = 1024,
     ) -> LLMResponse:
-        provider = settings.embedding_provider
-        if provider == "openai":
-            return await self._call_openai(system_prompt, user_prompt, model or "gpt-4o-mini", temperature, max_tokens)
-        elif provider == "openrouter":
-            return await self._call_openrouter(system_prompt, user_prompt, model or "openai/gpt-4o-mini", temperature, max_tokens)
+        """Try providers in priority order. ponytail: fallback on failure."""
+        errors = []
+        for provider_name in self._get_priority_list():
+            try:
+                result = await self._call_provider(
+                    provider_name, system_prompt, user_prompt, model, temperature, max_tokens
+                )
+                return result
+            except Exception as e:
+                self._provider_failures[provider_name] = self._provider_failures.get(provider_name, 0) + 1
+                self._provider_fallbacks += 1
+                logger.warning("Provider %s failed: %s, trying next", provider_name, e)
+                errors.append(f"{provider_name}: {e}")
+        raise RuntimeError(f"All providers failed: {'; '.join(errors)}")
+
+    async def _call_provider(
+        self,
+        provider_name: str,
+        system: str,
+        user: str,
+        model: str,
+        temp: float,
+        max_tokens: int,
+    ) -> LLMResponse:
+        if provider_name == "openai":
+            return await self._call_openai(system, user, model or "gpt-4o-mini", temp, max_tokens)
+        elif provider_name == "openrouter":
+            return await self._call_openrouter(system, user, model or "openai/gpt-4o-mini", temp, max_tokens)
         else:
-            # Default: try OpenAI-compatible endpoint
-            return await self._call_openai(system_prompt, user_prompt, model or "gpt-4o-mini", temperature, max_tokens)
+            raise ValueError(f"Unknown provider: {provider_name}")
 
     async def _call_openai(self, system: str, user: str, model: str, temp: float, max_tokens: int) -> LLMResponse:
         if not settings.openai_api_key:
-            raise ValueError("OPENAI_API_KEY not set — cannot call LLM")
+            raise ValueError("OPENAI_API_KEY not set")
         start = time.perf_counter()
         resp = await self._client.post(
             f"{settings.openai_base_url}/chat/completions",
@@ -75,7 +103,7 @@ class ProviderGateway:
 
     async def _call_openrouter(self, system: str, user: str, model: str, temp: float, max_tokens: int) -> LLMResponse:
         if not settings.openrouter_api_key:
-            raise ValueError("OPENROUTER_API_KEY not set — cannot call LLM")
+            raise ValueError("OPENROUTER_API_KEY not set")
         start = time.perf_counter()
         resp = await self._client.post(
             f"{settings.openrouter_base_url}/chat/completions",
@@ -98,6 +126,12 @@ class ProviderGateway:
             completion_tokens=usage.get("completion_tokens", 0),
             model=data.get("model", model),
         )
+
+    def health(self) -> dict:
+        return {
+            "provider_failures": dict(self._provider_failures),
+            "provider_fallbacks": self._provider_fallbacks,
+        }
 
     async def close(self):
         await self._client.aclose()

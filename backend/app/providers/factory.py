@@ -6,10 +6,8 @@ from app.providers import (
     OpenRouterProvider,
 )
 
-from app.providers.base import EmbeddingProvider
 
-
-def get_provider() -> EmbeddingProvider:
+def get_provider():
     """Return the configured embedding provider.
 
     The provider is chosen based on ``settings.embedding_provider``.

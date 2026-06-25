@@ -10,7 +10,6 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     services: dict[str, ServiceStatus]
-    memory_store: str = "enabled"
     uptime_seconds: float | None = None
     process_id: int | None = None
     python_version: str | None = None

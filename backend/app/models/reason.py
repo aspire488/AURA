@@ -4,6 +4,7 @@ from pydantic import BaseModel
 class ReasonRequest(BaseModel):
     query: str
     session_id: str = ""
+    stream: bool = False
 
 
 class ReasonResponse(BaseModel):
