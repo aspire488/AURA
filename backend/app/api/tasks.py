@@ -15,6 +15,7 @@ class TaskResponse(BaseModel):
     steps: list[str]
     results: list[str]
     current_step: int
+    execution_trace: list[dict]
     created_at: float
     updated_at: float
 

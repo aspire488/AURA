@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import time
 
 
 def plan_tool(query: str) -> str | None:
@@ -29,6 +30,23 @@ def plan_tool(query: str) -> str | None:
         return "http"
 
     return None
+
+
+def extract_tool_args(tool_name: str, query: str) -> dict:
+    """Extract arguments for a tool from the query text.
+
+    ponytail: regex extraction, no arg parser.
+    """
+    if tool_name == "filesystem":
+        m = re.search(r"\bread (?:file |the )?(.+)", query.lower())
+        return {"path": m.group(1).strip() if m else "."}
+    if tool_name == "list_directory":
+        m = re.search(r"\b(?:in |to |at )(.+)", query.lower())
+        return {"path": m.group(1).strip() if m else "."}
+    if tool_name == "http":
+        m = re.search(r"(https?://\S+)", query)
+        return {"url": m.group(1) if m else ""}
+    return {}
 
 
 # ponytail: new functions below — multi-step and deferred planning.
@@ -66,3 +84,31 @@ def classify_plan(query: str) -> str:
     if len(plan_steps(query)) > 1:
         return "multi"
     return "single"
+
+
+def create_plan(query: str) -> "ExecutionPlan":
+    """Build an ExecutionPlan from a query.
+
+    Splits on 'then', routes each step to tool or LLM.
+    ponytail: deterministic, regex-only, no LLM planning.
+    """
+    from app.runtime.execution_engine import ExecutionPlan, ExecutionStep
+
+    step_texts = plan_steps(query)
+    steps: list[ExecutionStep] = []
+
+    for i, text in enumerate(step_texts):
+        tool_name = plan_tool(text)
+        tool_args = extract_tool_args(tool_name, text) if tool_name else {}
+        steps.append(ExecutionStep(
+            index=i,
+            query=text,
+            tool_name=tool_name,
+            tool_args=tool_args,
+        ))
+
+    return ExecutionPlan(
+        query=query,
+        steps=steps,
+        created_at=time.time(),
+    )

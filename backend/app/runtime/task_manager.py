@@ -19,6 +19,7 @@ class TaskStatus(str, Enum):
     completed = "completed"
     cancelled = "cancelled"
     deferred = "deferred"
+    failed = "failed"
 
 
 @dataclass
@@ -30,6 +31,7 @@ class Task:
     steps: list[str] = field(default_factory=list)
     results: list[str] = field(default_factory=list)
     current_step: int = 0
+    execution_trace: list[dict] = field(default_factory=list)
     created_at: float = 0.0
     updated_at: float = 0.0
 
@@ -37,6 +39,7 @@ class Task:
         d = asdict(self)
         d["steps"] = json.dumps(d["steps"])
         d["results"] = json.dumps(d["results"])
+        d["execution_trace"] = json.dumps(d["execution_trace"])
         return d
 
     @classmethod
@@ -49,6 +52,7 @@ class Task:
             steps=json.loads(d.get("steps", "[]")),
             results=json.loads(d.get("results", "[]")),
             current_step=int(d.get("current_step", 0)),
+            execution_trace=json.loads(d.get("execution_trace", "[]")),
             created_at=float(d.get("created_at", 0)),
             updated_at=float(d.get("updated_at", 0)),
         )
@@ -89,13 +93,44 @@ class TaskManager:
         task.updated_at = time.time()
         await self._redis.client.hset(TASK_KEY.format(tid=task.task_id), mapping=task.to_dict())
 
+    async def record_step(self, task_id: str, step_index: int, output: str, trace_entry: dict) -> Task | None:
+        """Persist state after a single step completes.
+
+        ponytail: update current_step, append result, append trace.
+        """
+        task = await self.get(task_id)
+        if not task:
+            return None
+        task.current_step = step_index + 1
+        if len(task.results) <= step_index:
+            task.results.append(output)
+        else:
+            task.results[step_index] = output
+        task.execution_trace.append(trace_entry)
+        await self.update(task)
+        return task
+
     async def complete(self, task_id: str, result: str = "") -> Task | None:
         task = await self.get(task_id)
         if not task:
             return None
         task.status = TaskStatus.completed
         if result:
-            task.results.append(result)
+            if task.results:
+                task.results[-1] = result
+            else:
+                task.results.append(result)
+        await self.update(task)
+        return task
+
+    async def fail(self, task_id: str, error: str = "") -> Task | None:
+        """Mark task as failed. ponytail: separate from complete."""
+        task = await self.get(task_id)
+        if not task:
+            return None
+        task.status = TaskStatus.failed
+        if error and task.results:
+            task.results[-1] = f"[Failed: {error}]"
         await self.update(task)
         return task
 

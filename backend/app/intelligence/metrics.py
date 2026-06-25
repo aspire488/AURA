@@ -29,6 +29,13 @@ class RetrievalMetrics:
     total_task_latency_ms: float = 0.0
     total_tools_per_task: int = 0
     task_count: int = 0
+    # Execution engine metrics. ponytail: extend existing, no second system.
+    plans_executed: int = 0
+    steps_executed: int = 0
+    failed_plans: int = 0
+    failed_steps: int = 0
+    total_steps_per_plan: int = 0
+    total_execution_latency_ms: float = 0.0
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def record_retrieval(self, score: float, latency_ms: float, hit: bool = True) -> None:
@@ -83,11 +90,26 @@ class RetrievalMetrics:
         with self._lock:
             self.resumed_tasks += 1
 
+    def record_execution(self, steps: int, latency_ms: float, success: bool) -> None:
+        """Record execution engine run. ponytail: extend existing metrics."""
+        with self._lock:
+            self.plans_executed += 1
+            self.steps_executed += steps
+            self.total_steps_per_plan += steps
+            self.total_execution_latency_ms += latency_ms
+            if not success:
+                self.failed_plans += 1
+
+    def record_step_failed(self) -> None:
+        with self._lock:
+            self.failed_steps += 1
+
     def snapshot(self) -> dict:
         with self._lock:
             ret_count = self.retrieval_count or 1
             reason_count = self.reasoning_count or 1
             task_count = self.task_count or 1
+            plan_count = self.plans_executed or 1
             return {
                 "retrieval_count": self.retrieval_count,
                 "hit_count": self.hit_count,
@@ -109,6 +131,13 @@ class RetrievalMetrics:
                 "resumed_tasks": self.resumed_tasks,
                 "average_task_latency_ms": round(self.total_task_latency_ms / task_count, 2),
                 "average_tools_per_task": round(self.total_tools_per_task / task_count, 2),
+                # Execution engine metrics
+                "plans_executed": self.plans_executed,
+                "steps_executed": self.steps_executed,
+                "failed_plans": self.failed_plans,
+                "failed_steps": self.failed_steps,
+                "average_steps_per_plan": round(self.total_steps_per_plan / plan_count, 2),
+                "average_execution_latency_ms": round(self.total_execution_latency_ms / plan_count, 2),
             }
 
 

@@ -34,10 +34,13 @@ def build_prompt(
     query: str,
     context: ContextBundle,
     intent: str,
+    execution_context: str = "",
+    history_text: str = "",
 ) -> PromptBundle:
     """Assemble prompt from query, context, and intent.
 
     ponytail: string formatting only. No templates, no Jinja, no DSL.
+    Order: execution summary, tool outputs, retrieved memory, conversation history.
     """
     system = SYSTEM_PROMPTS.get(intent, SYSTEM_PROMPTS["unknown"])
 
@@ -51,7 +54,18 @@ def build_prompt(
         context_parts.append(", ".join(context.citations))
 
     context_text = "\n".join(context_parts)
-    user_prompt = f"Context:\n{context_text}\n\nQuestion: {query}" if context_text else f"Question: {query}"
+
+    # Assemble user prompt in correct order
+    sections: list[str] = []
+    if execution_context:
+        sections.append(f"Previous results:\n{execution_context}")
+    if context_text:
+        sections.append(f"Context:\n{context_text}")
+    if history_text:
+        sections.append(f"Conversation history:\n{history_text}")
+    sections.append(f"Question: {query}")
+
+    user_prompt = "\n\n".join(sections)
 
     total = _estimate_tokens(system) + _estimate_tokens(user_prompt)
 
