@@ -58,10 +58,37 @@ class ChromaService:
                 distance = result["distances"][0][i]
                 metadata = result["metadatas"][0][i] if result.get("metadatas") else {}
                 items.append({
+                    "chunk_id": result["ids"][0][i],
                     "text": result["documents"][0][i],
                     "score": round(1.0 / (1.0 + distance), 4),
                     "conversation_id": metadata.get("conversation_id", ""),
                     "role": metadata.get("role", ""),
+                    "timestamp": metadata.get("timestamp", ""),
+                })
+        return items
+
+    def keyword_search(self, query_text: str, top_k: int = 10) -> list[dict]:
+        """Substring search via Chroma where_document.
+
+        ponytail: uses native $contains, no BM25, no external index.
+        """
+        collection = self.client.get_or_create_collection(name="conversations")
+        result = collection.get(
+            where_document={"$contains": query_text},
+            limit=top_k,
+            include=["documents", "metadatas"],
+        )
+        items: list[dict] = []
+        if result.get("ids"):
+            for i in range(len(result["ids"])):
+                metadata = result["metadatas"][i] if result.get("metadatas") else {}
+                items.append({
+                    "chunk_id": result["ids"][i],
+                    "text": result["documents"][i] if result.get("documents") else "",
+                    "score": 0.0,
+                    "conversation_id": metadata.get("conversation_id", ""),
+                    "role": metadata.get("role", ""),
+                    "timestamp": metadata.get("timestamp", ""),
                 })
         return items
 
@@ -90,3 +117,18 @@ class ChromaService:
             collection.delete(ids=result["ids"])
             return len(result["ids"])
         return 0
+
+    def get_all_metadata(self) -> list[dict]:
+        """Return all chunks with metadata for stats. ponytail: full scan, fine for personal use."""
+        collection = self.client.get_or_create_collection(name="conversations")
+        result = collection.get(include=["documents", "metadatas"])
+        items: list[dict] = []
+        if result.get("ids"):
+            for i in range(len(result["ids"])):
+                metadata = result["metadatas"][i] if result.get("metadatas") else {}
+                items.append({
+                    "chunk_id": result["ids"][i],
+                    "text": result["documents"][i] if result.get("documents") else "",
+                    **metadata,
+                })
+        return items

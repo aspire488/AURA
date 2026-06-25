@@ -5,6 +5,8 @@ from fastapi import FastAPI
 
 from app.api.health import router as health_router
 from app.api.ingestion import router as ingestion_router
+from app.api.metrics import router as metrics_router
+from app.api.reason import router as reason_router
 from app.api.retrieval import router as retrieval_router
 from app.api.store import router as store_router
 from app.api.conversations import router as conversations_router
@@ -21,6 +23,8 @@ async def lifespan(app: FastAPI):
     await initialize_substrate(app)
     yield
     await shutdown_substrate(app)
+    from app.intelligence.provider_gateway import gateway
+    await gateway.close()
 
 
 app = FastAPI(
@@ -33,6 +37,8 @@ app.add_middleware(RequestMiddleware)
 
 app.include_router(health_router)
 app.include_router(ingestion_router)
+app.include_router(reason_router)
 app.include_router(retrieval_router)
 app.include_router(store_router)
 app.include_router(conversations_router)
+app.include_router(metrics_router)
