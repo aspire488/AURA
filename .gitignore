@@ -44,3 +44,4 @@ imports/
 
 # Node
 node_modules/
+opencode.json
