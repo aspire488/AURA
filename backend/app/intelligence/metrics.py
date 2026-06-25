@@ -36,6 +36,10 @@ class RetrievalMetrics:
     failed_steps: int = 0
     total_steps_per_plan: int = 0
     total_execution_latency_ms: float = 0.0
+    # Browser metrics. ponytail: extend existing, same lock.
+    browser_requests: int = 0
+    browser_failures: int = 0
+    browser_latency_ms: float = 0.0
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def record_retrieval(self, score: float, latency_ms: float, hit: bool = True) -> None:
@@ -104,6 +108,14 @@ class RetrievalMetrics:
         with self._lock:
             self.failed_steps += 1
 
+    def record_browser(self, latency_ms: float, success: bool) -> None:
+        """Record browser command. ponytail: extend existing metrics."""
+        with self._lock:
+            self.browser_requests += 1
+            self.browser_latency_ms += latency_ms
+            if not success:
+                self.browser_failures += 1
+
     def snapshot(self) -> dict:
         with self._lock:
             ret_count = self.retrieval_count or 1
@@ -138,6 +150,10 @@ class RetrievalMetrics:
                 "failed_steps": self.failed_steps,
                 "average_steps_per_plan": round(self.total_steps_per_plan / plan_count, 2),
                 "average_execution_latency_ms": round(self.total_execution_latency_ms / plan_count, 2),
+                # Browser metrics
+                "browser_requests": self.browser_requests,
+                "browser_failures": self.browser_failures,
+                "average_browser_latency_ms": round(self.browser_latency_ms / max(self.browser_requests, 1), 2),
             }
 
 

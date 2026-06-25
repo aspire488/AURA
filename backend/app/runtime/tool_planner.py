@@ -3,6 +3,27 @@ from __future__ import annotations
 import re
 import time
 
+# ponytail: one alias table, not one regex per site.
+SITE_ALIASES: dict[str, str] = {
+    "github": "https://github.com",
+    "youtube": "https://youtube.com",
+    "gmail": "https://mail.google.com",
+    "stackoverflow": "https://stackoverflow.com",
+    "google": "https://google.com",
+    "twitter": "https://twitter.com",
+    "x": "https://x.com",
+    "reddit": "https://reddit.com",
+    "linkedin": "https://linkedin.com",
+    "facebook": "https://facebook.com",
+    "netflix": "https://netflix.com",
+    "spotify": "https://spotify.com",
+}
+
+
+def _resolve_url(site: str) -> str:
+    """Resolve a site name to a URL. ponytail: alias table or treat as URL."""
+    return SITE_ALIASES.get(site.lower(), site if "." in site else f"https://{site}.com")
+
 
 def plan_tool(query: str) -> str | None:
     """Determine which tool, if any, matches the query.
@@ -29,6 +50,18 @@ def plan_tool(query: str) -> str | None:
     if re.search(r"\bhttps?://\S+", lower):
         return "http"
 
+    # Browser
+    if re.search(r"\b(?:close|close tab)\b", lower):
+        return "browser_close_tab"
+    if re.search(r"\b(?:activate|switch) tab\b", lower):
+        return "browser_activate_tab"
+    if re.search(r"\bsearch (?:google )?for\b", lower):
+        return "browser_search_google"
+    if re.search(r"\bopen (?:a )?tab\b", lower):
+        return "browser_open_tab"
+    if re.search(r"\b(?:open|go to|visit|launch)\b", lower):
+        return "browser_open_url"
+
     return None
 
 
@@ -46,6 +79,24 @@ def extract_tool_args(tool_name: str, query: str) -> dict:
     if tool_name == "http":
         m = re.search(r"(https?://\S+)", query)
         return {"url": m.group(1) if m else ""}
+
+    # Browser tools
+    if tool_name == "browser_open_url":
+        m = re.search(r"\b(?:open|go to|visit|launch)\s+(.+)", query.lower())
+        site = m.group(1).strip() if m else ""
+        return {"url": _resolve_url(site)}
+    if tool_name == "browser_open_tab":
+        m = re.search(r"\bopen (?:a )?tab\s+(.+)", query.lower())
+        site = m.group(1).strip() if m else ""
+        return {"url": _resolve_url(site)}
+    if tool_name == "browser_search_google":
+        m = re.search(r"\bsearch (?:google )?for\s+(.+)", query.lower())
+        return {"query": m.group(1).strip() if m else ""}
+    if tool_name == "browser_close_tab":
+        return {}
+    if tool_name == "browser_activate_tab":
+        return {}
+
     return {}
 
 

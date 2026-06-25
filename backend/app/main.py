@@ -12,6 +12,8 @@ from app.api.store import router as store_router
 from app.api.conversations import router as conversations_router
 from app.api.tools import router as tools_router
 from app.api.tasks import router as tasks_router
+from app.api.browser import router as browser_router
+from app.runtime.browser_ws import router as browser_ws_router
 from app.config import settings
 from app.middleware import RequestMiddleware
 from app.substrate.lifecycle import initialize_substrate, shutdown_substrate
@@ -48,3 +50,5 @@ app.include_router(conversations_router)
 app.include_router(metrics_router)
 app.include_router(tools_router)
 app.include_router(tasks_router)
+app.include_router(browser_router)
+app.include_router(browser_ws_router)
