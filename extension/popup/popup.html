@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset='utf-8'>
+  <title>AURA Extension</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 10px; }
+    .field { margin-bottom: 8px; }
+    button { margin-top: 8px; }
+    #status { font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class='field'>Status: <span id='status'>—</span></div>
+  <div class='field'>Backend URL: <span id='url'>—</span></div>
+  <div class='field'>Last command: <pre id='cmd'>—</pre></div>
+  <div class='field'>Last response: <pre id='resp'>—</pre></div>
+  <button id='reconnect'>Reconnect</button>
+  <script src='popup.js'></script>
+</body>
+</html>
