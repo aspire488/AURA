@@ -24,6 +24,9 @@ async def create(typ: str, target_ids: list[str], description: str = "", **kwarg
         metadata=kwargs.get("metadata", {}),
     )
     await challenge_store.save(ch)
+    # Refresh any decisions impacted by this challenge – minimal hook
+    from app.oracle.manager import on_challenge_updated
+    await on_challenge_updated(ch.challenge_id)
     return ch
 
 
