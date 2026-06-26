@@ -16,7 +16,7 @@ from app.observation.observation import Observation, ObservationType
 from app.providers.factory import get_provider
 from app.services.chroma_service import ChromaService
 from app.services.redis_service import RedisService
-from app.main import emit
+# ponytail: emit imported lazily
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +72,12 @@ async def store_memory(
         metadata={"role": body.role, "source": body.source},
     )
     await memory_store.append(memory)
+    # Trigger knowledge extraction for the new memory
+    try:
+        from app.knowledge.manager import process_memory
+        await process_memory(memory)
+    except Exception:
+        logger.debug("Knowledge extraction failed for memory %s", memory.memory_id, exc_info=True)
 
     # Also store in ChromaDB for semantic retrieval
     timestamp = datetime.now(tz=timezone.utc).isoformat()
@@ -97,7 +103,8 @@ async def store_memory(
 
     metrics.record_store(is_duplicate=False)
     metrics.record_memory_created(importance)
-    await emit("memory_stored", source="api/store", payload={"memory_type": memory_type.value, "importance": importance, "role": body.role})
+    from app.main import emit  # lazy import
+    await emit("memory_stored", source="api/store", payload={"memory_type": memory_type.value, "importance": importance, "role": body.role, "content": content})
     return StoreResponse(status="stored", memory_type=memory_type.value, importance=round(importance * 100))
 
 

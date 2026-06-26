@@ -9,10 +9,13 @@ _engine = None
 _session_factory = None
 
 
-def _get_engine():
+def _get_engine():  # ponytail: create engine based on config
     global _engine
     if _engine is None:
-        _engine = create_async_engine(settings.postgres_url, pool_pre_ping=True)
+        if not settings.postgres_url:
+            raise RuntimeError("AURA_POSTGRES_URL is not set; cannot initialize database engine.")
+        else:
+            _engine = create_async_engine(settings.postgres_url, pool_pre_ping=True)
     return _engine
 
 

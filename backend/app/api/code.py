@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from app.intelligence.metrics import metrics
 from app.runtime.code_executor import execute_code
-from app.main import emit
+# ponytail: emit imported lazily
 
 router = APIRouter(tags=["code"])
 
@@ -42,6 +42,7 @@ async def code_execute(body: CodeExecuteRequest):
     result = await execute_code(body.code)
     latency_ms = round((time.perf_counter() - start) * 1000, 2)
     metrics.record_code(latency_ms, result["exit_code"] == 0)
+    from app.main import emit  # lazy import
     await emit("code_executed", source="api/code", payload={"success": result["exit_code"] == 0, "exit_code": result["exit_code"], "latency_ms": latency_ms})
     return CodeExecuteResponse(
         success=result["exit_code"] == 0,

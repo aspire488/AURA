@@ -77,6 +77,10 @@ async def lifespan(app: FastAPI):
     await belief_store.initialize()
     from app.confidence.store import confidence_store
     await confidence_store.initialize()
+    from app.goal.store import goal_store
+    await goal_store.initialize()
+    from app.reasoning.store import reasoning_store
+    await reasoning_store.initialize()
     from app.opinion.store import opinion_store
     from app.reflection.store import reflection_store
     await opinion_store.initialize()
@@ -86,6 +90,10 @@ async def lifespan(app: FastAPI):
     from app.continuity.store import continuity_store
     await continuity_store.initialize()
 
+    # Initialize embedding provider at startup (pony tail)
+    from app.providers.factory import get_provider
+    _provider = get_provider()
+    await _provider.embed(["init"])
     logger.info("AURA started, version=%s", settings.version)
     yield
     # Graceful shutdown

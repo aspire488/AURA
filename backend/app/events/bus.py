@@ -30,7 +30,25 @@ class EventBus:
             handlers.remove(handler)
 
     async def publish(self, event: BaseEvent) -> None:
-        await self._queue.put(event)
+        """Publish an event and immediately invoke its subscribers.
+        ponytail: bypass async queue for synchronous processing to ensure downstream pipeline runs before caller continues.
+        """
+        logger.debug("C. EventBus.publish entered for %s", event.event_type.value)
+        # Directly dispatch to subscribers instead of queuing
+        handlers = self._subscribers.get(event.event_type, [])
+        logger.debug("F. Subscriber list resolved: %d handlers", len(handlers))
+        for handler in handlers:
+            try:
+                await handler(event)
+            except Exception:
+                logger.exception("Subscriber %s failed for %s", getattr(handler, '__name__', str(handler)), event.event_type)
+        # Persist event after handlers have run
+        try:
+            from app.events.store import event_store
+            await event_store.append(event)
+        except Exception:
+            logger.debug("Event persistence failed for %s", event.event_id)
+        logger.debug("D. Event processed synchronously for %s", event.event_type.value)
 
     async def start(self) -> None:
         if self._running:
@@ -53,9 +71,11 @@ class EventBus:
         while self._running:
             try:
                 event = await asyncio.wait_for(self._queue.get(), timeout=1.0)
+                logger.debug("E. Dispatch loop dequeued event %s", event.event_type.value)
             except asyncio.TimeoutError:
                 continue
             handlers = self._subscribers.get(event.event_type, [])
+            logger.debug("F. Subscriber list resolved: %d handlers", len(handlers))
             for handler in handlers:
                 try:
                     await handler(event)

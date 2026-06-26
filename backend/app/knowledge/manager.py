@@ -7,11 +7,13 @@ from app.knowledge.extractor import extract
 from app.knowledge.knowledge import Knowledge
 from app.knowledge.store import knowledge_store
 from app.memory.memory import Memory
+from app.events.event import EventType
 
 logger = logging.getLogger(__name__)
 
 
 async def process_memory(memory: Memory) -> list[Knowledge]:
+    
     """Extract knowledge from a memory and store it. ponytail: extract → dedup → store."""
     from app.intelligence.metrics import metrics
 
@@ -27,19 +29,17 @@ async def process_memory(memory: Memory) -> list[Knowledge]:
                 existing.updated_at = time.time()
                 await knowledge_store.update(existing)
                 metrics.record_knowledge_updated()
-            continue
-
         await knowledge_store.append(k)
+
+        # Emit KnowledgeCreated event for downstream processing
+        from app.main import emit
+
+        await emit(EventType.KNOWLEDGE_CREATED, payload={"knowledge_id": k.knowledge_id})
+
         metrics.record_knowledge_created()
         stored.append(k)
 
-        # ponytail: update world model for each new knowledge item
-        try:
-            from app.world.manager import update_from_knowledge
-            await update_from_knowledge(k)
-        except Exception:
-            logger.debug("World model update failed for knowledge %s", k.knowledge_id, exc_info=True)
-
+    
     return stored
 
 

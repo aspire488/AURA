@@ -7,16 +7,17 @@ from app.providers import (
 )
 
 
-def get_provider():
-    """Return the configured embedding provider.
+_cached_provider = None
 
-    The provider is chosen based on ``settings.embedding_provider``.
-    Closed set of allowed values: ``default``, ``openai``, ``openrouter``.
-    """
-    match settings.embedding_provider:
-        case "openrouter":
-            return OpenRouterProvider()
-        case "openai":
-            return OpenAIProvider()
-        case _:
-            return DefaultEmbeddingProvider()
+def get_provider():
+    """Return cached embedding provider, instantiate once on first call."""
+    global _cached_provider
+    if _cached_provider is None:
+        match settings.embedding_provider:
+            case "openrouter":
+                _cached_provider = OpenRouterProvider()
+            case "openai":
+                _cached_provider = OpenAIProvider()
+            case _:
+                _cached_provider = DefaultEmbeddingProvider()
+    return _cached_provider

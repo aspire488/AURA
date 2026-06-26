@@ -9,13 +9,14 @@ from app.runtime.agent_state import get_agent_state
 from app.runtime.tool_planner import classify_plan, plan_steps
 from app.intelligence.metrics import metrics
 from app.core.logging import session_id_var, task_id_var
-from app.main import emit
+# ponytail: emit imported lazily
 
 router = APIRouter(tags=["reasoning"])
 
 
 @router.post("/reason")
 async def reason_endpoint(body: ReasonRequest, request: Request):
+    from app.main import emit  # lazy import to avoid circular
     session_id = body.session_id
     session_id_var.set(session_id)
 

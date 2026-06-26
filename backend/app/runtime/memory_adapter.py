@@ -13,7 +13,7 @@ from app.memory.store import memory_store
 from app.observation.observation import Observation, ObservationType
 from app.services.chroma_service import ChromaService
 from app.services.redis_service import RedisService
-from app.main import emit
+# ponytail: emit imported lazily
 
 
 class MemoryAdapter:
@@ -100,5 +100,6 @@ class MemoryAdapter:
 
         metrics.record_store(is_duplicate=False)
         metrics.record_memory_created(importance)
+        from app.main import emit  # lazy import
         await emit("memory_stored", session_id=conversation_id, source="memory_adapter", payload={"memory_type": memory_type.value, "importance": importance, "role": role})
         return {"status": "stored", "memory_type": memory_type.value, "importance": importance}

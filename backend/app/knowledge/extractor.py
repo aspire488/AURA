@@ -59,15 +59,14 @@ def _extract_from_line(
     results: list[Knowledge],
     seen: set[tuple[str, str, str]],
 ) -> None:
+    matched = False
     for pattern, predicate, identity_marker in _PATTERNS:
         match = pattern.search(line)
         if not match:
             continue
-
+        matched = True
         groups = match.groups()
-
         if identity_marker == "identity":
-            # "I use X" → subject is identity_id
             subject = identity_id or "self"
             obj = groups[1] if len(groups) > 1 else groups[0]
         elif identity_marker is None:
@@ -75,20 +74,16 @@ def _extract_from_line(
             obj = groups[1].strip() if len(groups) > 1 else ""
         else:
             continue
-
         subject = _clean(subject)
         obj = _clean(obj)
-
         if not subject or not obj:
             continue
         if subject.lower() in _IGNORE_SUBJECTS:
             continue
-
         key = (subject.lower(), predicate, obj.lower())
         if key in seen:
             continue
         seen.add(key)
-
         results.append(Knowledge(
             identity_id=identity_id,
             source_memory_ids=[memory_id],
@@ -97,7 +92,23 @@ def _extract_from_line(
             object=obj,
             metadata={"source": "extractor", "pattern": predicate},
         ))
-
+    # ponytail: fallback – if no pattern matched, store the raw line as a statement
+    if not matched:
+        subject = identity_id or "self"
+        predicate = "says"
+        obj = _clean(line)
+        if obj:
+            key = (subject.lower(), predicate, obj.lower())
+            if key not in seen:
+                seen.add(key)
+                results.append(Knowledge(
+                    identity_id=identity_id,
+                    source_memory_ids=[memory_id],
+                    subject=subject,
+                    predicate=predicate,
+                    object=obj,
+                    metadata={"source": "fallback"},
+                ))
 
 def _clean(value: str) -> str:
     """Strip leading/trailing noise. ponytail: minimal cleanup."""

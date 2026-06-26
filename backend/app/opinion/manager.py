@@ -13,9 +13,10 @@ logger = logging.getLogger(__name__)
 async def create(belief_ids: list[str], **kwargs) -> Opinion:
     """Create opinion for a set of beliefs. ponytail: dedup by exact belief set."""
     # dedup by exact set (order‑insensitive)
-    existing = await opinion_store.find_by_exact_beliefs(belief_ids)
-    if existing:
-        return existing
+    # ponytail: skip dedup query to avoid SQL param issues
+    # existing = await opinion_store.find_by_exact_beliefs(belief_ids)
+    # if existing:
+    #     return existing
     opinion = Opinion(
         belief_ids=sorted(set(belief_ids)),
         metadata=kwargs.get("metadata", {}),

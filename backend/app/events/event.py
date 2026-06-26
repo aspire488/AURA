@@ -23,6 +23,13 @@ class EventType(str, Enum):
     PROVIDER_FAILED = "provider_failed"
     REASONING_STARTED = "reasoning_started"
     REASONING_COMPLETED = "reasoning_completed"
+    KNOWLEDGE_CREATED = "knowledge_created"
+    WORLD_UPDATED = "world_updated"
+    BELIEF_UPDATED = "belief_updated"
+    CONFIDENCE_UPDATED = "confidence_updated"
+    OPINION_UPDATED = "opinion_updated"
+    GOAL_UPDATED = "goal_updated"
+    REASONING_UPDATED = "reasoning_updated"
     REFLECTION_CREATED = "reflection_created"
 
 

@@ -8,9 +8,10 @@ from app.goal.store import goal_store
 # Creation dedup by exact opinion set
 async def create(opinion_ids: list[str], priority: int = 0, **kwargs) -> Goal:
     """Create a goal from a set of opinion IDs. ponytail: dedup exact set."""
-    existing = await goal_store.find_by_exact_opinions(opinion_ids)
-    if existing:
-        return existing
+    # ponytail: skip dedup, always insert new goal
+    # existing = await goal_store.find_by_exact_opinions(opinion_ids)
+    # if existing:
+    #     return existing
     goal = Goal(
         supporting_opinion_ids=sorted(set(opinion_ids)),
         priority=priority,

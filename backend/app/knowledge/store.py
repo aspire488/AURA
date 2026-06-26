@@ -46,6 +46,7 @@ class KnowledgeStore:
             logger.exception("Failed to initialize knowledge table")
 
     async def append(self, knowledge: Knowledge) -> None:
+
         try:
             async with get_session() as session:
                 await session.execute(

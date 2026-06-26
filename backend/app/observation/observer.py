@@ -23,6 +23,11 @@ async def observe(event: BaseEvent) -> None:
         identity = await resolve_identity(event)
         obs = normalize(event, identity.identity_id)
         await observation_store.append(obs)
+        # Skip re‑evaluating MEMORY observations emitted from MEMORY_STORED events – they already represent stored memories.
+        from app.observation.observation import ObservationType
+        if obs.observation_type != ObservationType.MEMORY:
+            from app.memory.manager import evaluate
+            await evaluate(obs)
         metrics.record_observation_created(round((time.perf_counter() - start) * 1000, 2))
 
         # Memory pipeline: evaluate every observation, only important ones become memories.

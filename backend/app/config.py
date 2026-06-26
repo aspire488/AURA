@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
 
     postgres_url: str = ""
-    filesystem_root: str = "/var/aura"
+    filesystem_root: str = "./data"  # ponytail: use local writable dir
 
     # Provider resilience. ponytail: comma-separated priority list.
     provider_priority: str = "openai,openrouter"

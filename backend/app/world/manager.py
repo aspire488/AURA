@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 async def update_from_knowledge(knowledge: "Knowledge") -> None:
+
     """Process a knowledge item into the world model. ponytail: resolve entity → resolve entity → store relation.
 
     This is the core integration point. Every knowledge item flows through here.
