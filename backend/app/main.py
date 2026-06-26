@@ -60,6 +60,9 @@ async def lifespan(app: FastAPI):
     from app.identity.store import identity_store
     await identity_store.initialize()
 
+    from app.observation.store import observation_store
+    await observation_store.initialize()
+
     logger.info("AURA started, version=%s", settings.version)
     yield
     # Graceful shutdown

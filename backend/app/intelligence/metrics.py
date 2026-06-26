@@ -61,6 +61,10 @@ class RetrievalMetrics:
     identity_merges: int = 0
     identity_resolutions: int = 0
     relationship_updates: int = 0
+    # Observation metrics. ponytail: extend existing, same lock.
+    observations_created: int = 0
+    observations_failed: int = 0
+    total_observation_latency_ms: float = 0.0
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def record_retrieval(self, score: float, latency_ms: float, hit: bool = True) -> None:
@@ -199,6 +203,15 @@ class RetrievalMetrics:
         with self._lock:
             self.relationship_updates += 1
 
+    def record_observation_created(self, latency_ms: float) -> None:
+        with self._lock:
+            self.observations_created += 1
+            self.total_observation_latency_ms += latency_ms
+
+    def record_observation_failed(self) -> None:
+        with self._lock:
+            self.observations_failed += 1
+
     def snapshot(self) -> dict:
         with self._lock:
             ret_count = self.retrieval_count or 1
@@ -260,6 +273,12 @@ class RetrievalMetrics:
                 "identity_merges": self.identity_merges,
                 "identity_resolutions": self.identity_resolutions,
                 "relationship_updates": self.relationship_updates,
+                # Observation metrics
+                "observations_created": self.observations_created,
+                "observations_failed": self.observations_failed,
+                "average_observation_latency_ms": round(
+                    self.total_observation_latency_ms / max(self.observations_created, 1), 2
+                ),
             }
 
 
