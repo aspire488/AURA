@@ -42,9 +42,12 @@ async def list_all(state: str = "", limit: int = 100) -> list[Reasoning]:
 
 
 async def update(reasoning: Reasoning) -> None:
-    """Persist mutated reasoning. ponytail: caller updates fields, we refresh timestamp."""
+    """Persist mutated reasoning. ponytail: caller updates fields, we refresh timestamp and trigger challenge eval."""
     reasoning.updated_at = time.time()
     await reasoning_store.save(reasoning)
+    # ponytail: notify challenger of updated reasoning
+    from app.challenger.manager import on_reasoning_updated
+    await on_reasoning_updated(reasoning.reasoning_id)
 
 
 async def invalidate(reasoning_id: str) -> Reasoning | None:
