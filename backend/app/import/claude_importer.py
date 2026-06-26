@@ -3,7 +3,7 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Any, Callable
 
-from app.import.manager import register_importer, import_records
+from .manager import register_importer, import_records
 
 logger = logging.getLogger(__name__)
 

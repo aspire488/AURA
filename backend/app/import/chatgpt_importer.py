@@ -4,7 +4,7 @@ import zipfile
 from pathlib import Path
 from typing import List, Dict, Any, Callable
 
-from app.import.manager import register_importer, import_records
+from .manager import register_importer, import_records
 
 logger = logging.getLogger(__name__)
 
@@ -67,14 +67,13 @@ async def import_chatgpt_export(zip_path: str, progress_callback: Callable[[int]
         return 0
     records = _flatten_messages(conversations)
     if progress_callback:
-+        # Report total records prepared for import (including duplicates that may be skipped later)
-+        progress_callback(len(records))
+        progress_callback(len(records))
     if not records:
         logger.warning("No messages found in %s", zip_path)
-+        return 0
-+    created = await import_records("chatgpt_export", records)
-+    logger.info("Imported %d new messages from %s", created, zip_path)
-+    return created
+        return 0
+    created = await import_records("chatgpt_export", records)
+    logger.info("Imported %d new messages from %s", created, zip_path)
+    return created
 
 
 # Register the importer – version can be bumped when the format changes.

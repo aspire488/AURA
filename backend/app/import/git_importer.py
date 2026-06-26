@@ -19,7 +19,7 @@ import subprocess
 from pathlib import Path
 from typing import Callable, List, Dict, Any
 
-from app.import.manager import register_importer, import_records
+from .manager import register_importer, import_records
 
 logger = logging.getLogger(__name__)
 

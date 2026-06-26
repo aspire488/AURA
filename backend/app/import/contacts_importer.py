@@ -1,6 +1,9 @@
-'''Google Contacts Takeout JSON importer.
+"""Contacts importer stub.
 
-Expects a JSON file where contacts are in an ``connections`` list (Google People API format)
-or a simple list of contact dicts. Emits a canonical payload per contact:\n
-- ``type``: ``contact``\n- ``external_id``: contact ``resourceName`` or generated index\n- ``display_name``\n- ``email`` (first email)\n- ``phone`` (first phone number)\n- ``organization`` (first organization name)\n- ``notes`` (biography/content)\n\nMissing fields are tolerated.'''\n\nimport json\nimport logging\nfrom typing import Callable, List, Dict, Any\n\nfrom app.import.manager import register_importer, import_records\n\nlogger = logging.getLogger(__name__)\n\ndef _extract_first(items: List[Dict[str, Any]], key: str) -> str:\n    """Return first item's ``value`` or ``displayName``. ponytail: simple."""\n    if not items:
-        return ''\n    first = items[0]\n    return first.get('value') or first.get('displayName') or ''\n\ndef _load_records(path: str) -> List[Dict[str, Any]]:\n    """Load contacts JSON and produce canonical records.\n\n    ponytail: supports Google People ``connections`` format or generic list.\n    """\n    with open(path, 'r', encoding='utf-8') as f:\n        data = json.load(f)\n    contacts = data.get('connections', data)\n    records: List[Dict[str, Any]] = []\n    for idx, ct in enumerate(contacts):\n        try:\n            rec: Dict[str, Any] = {\n                'type': 'contact',\n                'external_id': ct.get('resourceName') or f'contact:{idx}',\n                'display_name': ct.get('names', [{}])[0].get('displayName', ''),\n                'email': _extract_first(ct.get('emailAddresses', []), 'value'),\n                'phone': _extract_first(ct.get('phoneNumbers', []), 'value'),\n                'organization': _extract_first(ct.get('organizations', []), 'name'),\n                'notes': ct.get('biographies', [{}])[0].get('value', ''),\n            }\n            records.append(rec)\n        except Exception:\n            logger.exception('Failed to parse contact %s', ct.get('resourceName'))\n    return records\n\nasync def import_contacts(path: str, progress_callback: Callable[[int], None] | None = None) -> int:\n    """Import contacts from a Takeout JSON file. Returns created count."""\n    records = _load_records(path)\n    if progress_callback:\n        progress_callback(len(records))\n    created = await import_records('contacts_import', records)\n    logger.info('Imported %d new Contact observations from %s', created, path)\n    return created\n\n# Register importer – identity handler\nregister_importer('contacts_import', '1.0', lambda rec: rec)  # ponytail: identity
+Provides a no‑op importer for contact data.
+"""
+
+from .manager import register_importer, import_records
+
+# Register importer – identity handler
+register_importer('contacts_import', '1.0', lambda rec: rec)

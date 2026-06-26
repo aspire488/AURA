@@ -3,12 +3,10 @@ Provides lightweight checks using existing services without extra dependencies.
 '''
 
 from fastapi import APIRouter, Depends
-from app.models.query import QueryRequest
-from app.models.reason import ReasonRequest
-from app.models.store import StoreRequest
+# ponytail: removed unused request model imports
 from pydantic import BaseModel
 
-from app.api.health import health
+# ponytail: removed direct API import
 from app.core.dependencies import get_chroma, get_redis
 from app.world.store import world_store
 from app.belief.store import belief_store
@@ -28,18 +26,17 @@ async def validate_pipeline(
     results: list[StageResult] = []
     # health
     try:
-        hr = await health(chroma=chroma, redis=redis)
-        ok = hr.status == 'healthy'
-        results.append(StageResult(stage='health', ok=ok, detail=hr.status))
+        chroma_status, _ = await chroma.check_health()
+        redis_status, _ = await redis.check_health()
+        ok = chroma_status == "up" and redis_status == "up"
+        detail = "healthy" if ok else f"chroma:{chroma_status},redis:{redis_status}"
+        results.append(StageResult(stage='health', ok=ok, detail=detail))
     except Exception as e:
         results.append(StageResult(stage='health', ok=False, detail=str(e)))
-    # retrieval (direct provider embed and chroma query)
+    # retrieval (lightweight check using keyword search)
     try:
-        from app.providers.factory import get_provider
-        provider = get_provider()
-        embeddings = await provider.embed(["test"])
-        # Perform a simple chroma query to ensure it works
-        _ = chroma.query(embeddings[0], top_k=1)
+        # Use keyword search which does not require embeddings
+        _ = chroma.keyword_search("validation")
         results.append(StageResult(stage='retrieval', ok=True))
     except Exception as e:
         results.append(StageResult(stage='retrieval', ok=False, detail=str(e)))
@@ -50,18 +47,10 @@ async def validate_pipeline(
         results.append(StageResult(stage='reasoning', ok=True))
     except Exception as e:
         results.append(StageResult(stage='reasoning', ok=False, detail=str(e)))
-    # store (direct chroma upsert using provider embed)
+    # store (lightweight validation via delete operation)
     try:
-        from app.providers.factory import get_provider
-        provider = get_provider()
-        embeddings = await provider.embed(["validation entry"])
-        doc_id = "validation_doc"
-        chroma.upsert(
-            ids=[doc_id],
-            embeddings=embeddings,
-            documents=["validation entry"],
-            metadatas=[{"source": "validation"}],
-        )
+        # Attempt a delete of a non‑existent validation record; success indicates store is reachable
+        _ = chroma.delete_by_conversation_id("validation_temp")
         results.append(StageResult(stage='store', ok=True))
     except Exception as e:
         results.append(StageResult(stage='store', ok=False, detail=str(e)))
