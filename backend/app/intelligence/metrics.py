@@ -74,6 +74,10 @@ class RetrievalMetrics:
     knowledge_created: int = 0
     knowledge_updated: int = 0
     knowledge_queries: int = 0
+    # World model metrics. ponytail: extend existing, same lock.
+    world_model_updates: int = 0
+    world_model_failures: int = 0
+    world_model_merges: int = 0
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def record_retrieval(self, score: float, latency_ms: float, hit: bool = True) -> None:
@@ -246,6 +250,18 @@ class RetrievalMetrics:
         with self._lock:
             self.knowledge_queries += 1
 
+    def record_world_model_update(self) -> None:
+        with self._lock:
+            self.world_model_updates += 1
+
+    def record_world_model_failure(self) -> None:
+        with self._lock:
+            self.world_model_failures += 1
+
+    def record_world_model_merge(self) -> None:
+        with self._lock:
+            self.world_model_merges += 1
+
     def snapshot(self) -> dict:
         with self._lock:
             ret_count = self.retrieval_count or 1
@@ -324,6 +340,10 @@ class RetrievalMetrics:
                 "knowledge_created": self.knowledge_created,
                 "knowledge_updated": self.knowledge_updated,
                 "knowledge_queries": self.knowledge_queries,
+                # World model metrics
+                "world_model_updates": self.world_model_updates,
+                "world_model_failures": self.world_model_failures,
+                "world_model_merges": self.world_model_merges,
             }
 
 

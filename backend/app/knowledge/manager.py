@@ -33,6 +33,13 @@ async def process_memory(memory: Memory) -> list[Knowledge]:
         metrics.record_knowledge_created()
         stored.append(k)
 
+        # ponytail: update world model for each new knowledge item
+        try:
+            from app.world.manager import update_from_knowledge
+            await update_from_knowledge(k)
+        except Exception:
+            logger.debug("World model update failed for knowledge %s", k.knowledge_id, exc_info=True)
+
     return stored
 
 
