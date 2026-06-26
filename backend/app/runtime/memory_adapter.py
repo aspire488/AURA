@@ -1,20 +1,23 @@
 from __future__ import annotations
 
 import hashlib
+import uuid
 from datetime import datetime, timezone
 
 from app.core.dependencies import get_chroma, get_redis
 from app.intelligence.deduplicator import content_hash
-from app.intelligence.memory_classifier import classify_memory
-from app.intelligence.memory_ranker import score_importance
 from app.intelligence.metrics import metrics
+from app.memory.classifier import classify
+from app.memory.memory import Memory, MemoryType
+from app.memory.store import memory_store
+from app.observation.observation import Observation, ObservationType
 from app.services.chroma_service import ChromaService
 from app.services.redis_service import RedisService
 from app.main import emit
 
 
 class MemoryAdapter:
-    """Single interface over Chroma + Redis.
+    """Single interface over Chroma + Redis + Memory store.
 
     ponytail: delegates to existing services, no new abstractions.
     """
@@ -34,8 +37,16 @@ class MemoryAdapter:
         if not content:
             return {"status": "empty"}
 
-        memory_type = classify_memory(role, content)
-        importance = score_importance(role, content)
+        # Create observation for classification
+        observation = Observation(
+            observation_type=ObservationType.USER_MESSAGE if role == "user" else ObservationType.ASSISTANT_RESPONSE,
+            source=source,
+            actor=role,
+            summary=content[:200],
+            payload={"content": content, "role": role},
+        )
+
+        memory_type, importance = classify(observation)
         norm_hash = content_hash(content)
 
         # Dedup check
@@ -54,6 +65,17 @@ class MemoryAdapter:
             metrics.record_store(is_duplicate=True)
             return {"status": "duplicate"}
 
+        # Create and persist memory to PostgreSQL
+        memory = Memory(
+            observation_id=observation.observation_id,
+            memory_type=memory_type,
+            importance=importance,
+            summary=content[:200],
+            content=content,
+            metadata={"role": role, "source": source, "conversation_id": conversation_id},
+        )
+        await memory_store.append(memory)
+
         from app.providers.factory import get_provider
         provider = get_provider()
         embeddings = await provider.embed([content])
@@ -70,12 +92,13 @@ class MemoryAdapter:
                 "source": source,
                 "timestamp": timestamp,
                 "conversation_id": conversation_id,
-                "memory_type": memory_type,
+                "memory_type": memory_type.value,
                 "importance": importance,
                 "content_hash": norm_hash,
             }],
         )
 
         metrics.record_store(is_duplicate=False)
-        await emit("memory_stored", session_id=conversation_id, source="memory_adapter", payload={"memory_type": memory_type, "importance": importance, "role": role})
-        return {"status": "stored", "memory_type": memory_type, "importance": importance}
+        metrics.record_memory_created(importance)
+        await emit("memory_stored", session_id=conversation_id, source="memory_adapter", payload={"memory_type": memory_type.value, "importance": importance, "role": role})
+        return {"status": "stored", "memory_type": memory_type.value, "importance": importance}

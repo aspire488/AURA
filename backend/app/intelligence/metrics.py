@@ -65,6 +65,11 @@ class RetrievalMetrics:
     observations_created: int = 0
     observations_failed: int = 0
     total_observation_latency_ms: float = 0.0
+    # Memory metrics. ponytail: extend existing, same lock.
+    memories_created: int = 0
+    memories_skipped: int = 0
+    memory_retrievals: int = 0
+    total_importance: float = 0.0
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def record_retrieval(self, score: float, latency_ms: float, hit: bool = True) -> None:
@@ -212,6 +217,19 @@ class RetrievalMetrics:
         with self._lock:
             self.observations_failed += 1
 
+    def record_memory_created(self, importance: float) -> None:
+        with self._lock:
+            self.memories_created += 1
+            self.total_importance += importance
+
+    def record_memory_skipped(self) -> None:
+        with self._lock:
+            self.memories_skipped += 1
+
+    def record_memory_retrieval(self) -> None:
+        with self._lock:
+            self.memory_retrievals += 1
+
     def snapshot(self) -> dict:
         with self._lock:
             ret_count = self.retrieval_count or 1
@@ -278,6 +296,13 @@ class RetrievalMetrics:
                 "observations_failed": self.observations_failed,
                 "average_observation_latency_ms": round(
                     self.total_observation_latency_ms / max(self.observations_created, 1), 2
+                ),
+                # Memory metrics
+                "memories_created": self.memories_created,
+                "memories_skipped": self.memories_skipped,
+                "memory_retrievals": self.memory_retrievals,
+                "average_importance": round(
+                    self.total_importance / max(self.memories_created, 1), 4
                 ),
             }
 

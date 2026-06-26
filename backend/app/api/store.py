@@ -1,15 +1,18 @@
 import hashlib
 import logging
+import time
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
 
 from app.core.dependencies import get_chroma, get_redis
 from app.intelligence.deduplicator import content_hash
-from app.intelligence.memory_classifier import classify_memory
-from app.intelligence.memory_ranker import score_importance
 from app.intelligence.metrics import metrics
+from app.memory.classifier import classify
+from app.memory.memory import Memory, MemoryType
+from app.memory.store import memory_store
 from app.models.store import MemoryStatsResponse, StoreRequest, StoreResponse
+from app.observation.observation import Observation, ObservationType
 from app.providers.factory import get_provider
 from app.services.chroma_service import ChromaService
 from app.services.redis_service import RedisService
@@ -31,13 +34,18 @@ async def store_memory(
     if not content:
         return StoreResponse(status="stored")
 
-    memory_type = classify_memory(body.role, content)
-    importance = score_importance(body.role, content)
+    # Create observation from API request
+    observation = Observation(
+        observation_type=ObservationType.USER_MESSAGE if body.role == "user" else ObservationType.ASSISTANT_RESPONSE,
+        source=body.source,
+        actor=body.role,
+        summary=content[:200],
+        payload={"content": content, "role": body.role},
+    )
 
-    timestamp = datetime.now(tz=timezone.utc).isoformat()
-    doc_id = hashlib.sha256(f"{content}{timestamp}".encode()).hexdigest()
+    memory_type, importance = classify(observation)
 
-    # Dedup check
+    # Dedup check via content hash
     norm_hash = content_hash(content)
     existing_hashes = set()
     try:
@@ -54,6 +62,21 @@ async def store_memory(
         metrics.record_store(is_duplicate=True)
         return StoreResponse(status="duplicate")
 
+    # Create and persist memory to PostgreSQL
+    memory = Memory(
+        observation_id=observation.observation_id,
+        memory_type=memory_type,
+        importance=importance,
+        summary=content[:200],
+        content=content,
+        metadata={"role": body.role, "source": body.source},
+    )
+    await memory_store.append(memory)
+
+    # Also store in ChromaDB for semantic retrieval
+    timestamp = datetime.now(tz=timezone.utc).isoformat()
+    doc_id = hashlib.sha256(f"{content}{timestamp}".encode()).hexdigest()
+
     provider = get_provider()
     embeddings = await provider.embed([content])
 
@@ -66,15 +89,16 @@ async def store_memory(
             "source": body.source,
             "timestamp": timestamp,
             "conversation_id": "live_kio",
-            "memory_type": memory_type,
+            "memory_type": memory_type.value,
             "importance": importance,
             "content_hash": norm_hash,
         }],
     )
 
     metrics.record_store(is_duplicate=False)
-    await emit("memory_stored", source="api/store", payload={"memory_type": memory_type, "importance": importance, "role": body.role})
-    return StoreResponse(status="stored", memory_type=memory_type, importance=importance)
+    metrics.record_memory_created(importance)
+    await emit("memory_stored", source="api/store", payload={"memory_type": memory_type.value, "importance": importance, "role": body.role})
+    return StoreResponse(status="stored", memory_type=memory_type.value, importance=round(importance * 100))
 
 
 @router.get("/stats", response_model=MemoryStatsResponse)
@@ -87,12 +111,15 @@ async def memory_stats(
     conversations = {c.get("conversation_id", "") for c in all_chunks}
     lengths = [len(c.get("text", "")) for c in all_chunks]
 
-    type_counts = {"short_term": 0, "long_term": 0, "ephemeral": 0}
+    # Count by canonical memory types
+    type_counts = {"working": 0, "episodic": 0, "semantic": 0, "historical": 0}
     timestamps = []
     for c in all_chunks:
         mt = c.get("memory_type", "")
-        if mt in type_counts:
-            type_counts[mt] += 1
+        # Map old types to new canonical types
+        mapped = _map_type(mt)
+        if mapped in type_counts:
+            type_counts[mapped] += 1
         ts = c.get("timestamp", "")
         if ts:
             timestamps.append(ts)
@@ -101,10 +128,23 @@ async def memory_stats(
         total_chunks=total,
         total_conversations=len(conversations),
         duplicates_skipped=metrics.duplicate_skip_count,
-        short_term=type_counts["short_term"],
-        long_term=type_counts["long_term"],
-        ephemeral=type_counts["ephemeral"],
+        short_term=type_counts["working"] + type_counts["episodic"],
+        long_term=type_counts["semantic"],
+        ephemeral=type_counts["historical"],
         average_chunk_length=round(sum(lengths) / max(total, 1), 1),
         oldest_memory=min(timestamps) if timestamps else "",
         newest_memory=max(timestamps) if timestamps else "",
     )
+
+
+def _map_type(old_type: str) -> str:
+    """Map old memory types to canonical types. ponytail: flat dict."""
+    return {
+        "long_term": "semantic",
+        "short_term": "working",
+        "ephemeral": "historical",
+        "working": "working",
+        "episodic": "episodic",
+        "semantic": "semantic",
+        "historical": "historical",
+    }.get(old_type, "historical")
