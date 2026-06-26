@@ -2,7 +2,7 @@ import json
 import logging
 import zipfile
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Callable
 
 from app.import.manager import register_importer, import_records
 
@@ -25,30 +25,39 @@ def _load_conversations(zip_path: str) -> List[Dict[str, Any]]:
 
 
 def _flatten_messages(conversations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Convert the nested conversation structure into a flat list of message records.
-    Each record will be passed to the generic ``import_records`` pipeline.
+    """Convert nested conversation structure into flat message records.
+    Adds ``parent_message_id`` for ordering and skips malformed entries.
     """
     records: List[Dict[str, Any]] = []
+    malformed = 0
     for conv in conversations:
         conv_id = conv.get("id") or conv.get("uuid") or conv.get("conversation_id")
-        # Preserve original ordering – messages are already chronological.
+        if not conv_id:
+            malformed += 1
+            continue
+        prev_msg_id: Optional[str] = None
         for msg in conv.get("messages", []):
             msg_id = msg.get("id")
+            if not msg_id:
+                malformed += 1
+                continue
             payload: Dict[str, Any] = {
                 "conversation_id": conv_id,
                 "message_id": msg_id,
                 "timestamp": msg.get("timestamp") or msg.get("create_time"),
                 "author_role": msg.get("author", {}).get("role", msg.get("role")),
                 "content": msg.get("content") or msg.get("text"),
-                # parent/child relationships are implicit by ordering; explicit parent can be added if present.
+                "parent_message_id": prev_msg_id,  # ponytail: simple parent link
             }
-            # Attach a stable external identifier for duplicate detection.
             payload["external_id"] = f"{conv_id}:{msg_id}"
             records.append(payload)
+            prev_msg_id = msg_id
+    if malformed:
+        logger.warning("Skipped %d malformed messages in ChatGPT import", malformed)  # ponytail: report issue
     return records
 
 
-async def import_chatgpt_export(zip_path: str) -> int:
+async def import_chatgpt_export(zip_path: str, progress_callback: Callable[[int], None] | None = None) -> int:
     """Public entry point – load a ChatGPT ``export.zip`` and import all messages.
     Returns the number of newly created observation events.
     """
@@ -57,12 +66,15 @@ async def import_chatgpt_export(zip_path: str) -> int:
         logger.warning("No conversations loaded from %s", zip_path)
         return 0
     records = _flatten_messages(conversations)
+    if progress_callback:
++        # Report total records prepared for import (including duplicates that may be skipped later)
++        progress_callback(len(records))
     if not records:
         logger.warning("No messages found in %s", zip_path)
-        return 0
-    created = await import_records("chatgpt_export", records)
-    logger.info("Imported %d new messages from %s", created, zip_path)
-    return created
++        return 0
++    created = await import_records("chatgpt_export", records)
++    logger.info("Imported %d new messages from %s", created, zip_path)
++    return created
 
 
 # Register the importer – version can be bumped when the format changes.

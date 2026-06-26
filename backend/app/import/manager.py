@@ -64,6 +64,9 @@ def _hash_payload(payload: Dict[str, Any]) -> str:
 
 
 async def import_records(importer_name: str, records: list[Dict[str, Any]]) -> int:
+    # Initialize progress tracking for this run (pony-tail: simple stats)
+    from .inspector import start_import, record_processed, set_last_trace
+    start_import(importer_name, total=len(records))
     """Process *records* with the registered importer.
 
     Returns the number of newly created events.
@@ -75,10 +78,13 @@ async def import_records(importer_name: str, records: list[Dict[str, Any]]) -> i
     await _ensure_table()
     created = 0
     for rec in records:
+        # Process each raw record
         try:
             payload = handler(rec)
-        except Exception as e:
+        except Exception:
             logger.exception("Importer %s failed on record %s", importer_name, rec)
+            # Record failure
+            record_processed(importer_name, failure=True)
             continue
         # Determine external identifier hash – use explicit key if present
         external_id = payload.get("external_id")
@@ -94,6 +100,8 @@ async def import_records(importer_name: str, records: list[Dict[str, Any]]) -> i
             )
             if result.first():
                 logger.debug("Duplicate import skipped for %s", hash_key)
+                # Record duplicate as skipped
+                record_processed(importer_name, duplicate=True)
                 continue
             # Emit event – goes through observation pipeline
             await emit(
@@ -102,7 +110,7 @@ async def import_records(importer_name: str, records: list[Dict[str, Any]]) -> i
                 payload=payload,
                 version=version,
             )
-            # Record import
+            # Record import in DB
             await session.execute(
                 text(
                     "INSERT INTO imports (import_id, importer_name, external_hash, timestamp) "
@@ -117,5 +125,9 @@ async def import_records(importer_name: str, records: list[Dict[str, Any]]) -> i
             )
             await session.commit()
             created += 1
+            # Record successful creation and progress
+            record_processed(importer_name, created=True)
+            # Store last trace payload for simple pipeline view (pony-tail: minimal)
+            set_last_trace(importer_name, payload)
     logger.info("Import %s processed %d records, %d new events", importer_name, len(records), created)
     return created
