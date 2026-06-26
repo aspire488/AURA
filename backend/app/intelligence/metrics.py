@@ -78,6 +78,11 @@ class RetrievalMetrics:
     world_model_updates: int = 0
     world_model_failures: int = 0
     world_model_merges: int = 0
+    # Belief metrics. ponytail: extend existing, same lock.
+    beliefs_created: int = 0
+    beliefs_updated: int = 0
+    beliefs_invalidated: int = 0
+    beliefs_merged: int = 0
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def record_retrieval(self, score: float, latency_ms: float, hit: bool = True) -> None:
@@ -262,6 +267,22 @@ class RetrievalMetrics:
         with self._lock:
             self.world_model_merges += 1
 
+    def record_belief_created(self) -> None:
+        with self._lock:
+            self.beliefs_created += 1
+
+    def record_belief_updated(self) -> None:
+        with self._lock:
+            self.beliefs_updated += 1
+
+    def record_belief_invalidated(self) -> None:
+        with self._lock:
+            self.beliefs_invalidated += 1
+
+    def record_belief_merge(self) -> None:
+        with self._lock:
+            self.beliefs_merged += 1
+
     def snapshot(self) -> dict:
         with self._lock:
             ret_count = self.retrieval_count or 1
@@ -344,6 +365,11 @@ class RetrievalMetrics:
                 "world_model_updates": self.world_model_updates,
                 "world_model_failures": self.world_model_failures,
                 "world_model_merges": self.world_model_merges,
+                # Belief metrics
+                "beliefs_created": self.beliefs_created,
+                "beliefs_updated": self.beliefs_updated,
+                "beliefs_invalidated": self.beliefs_invalidated,
+                "beliefs_merged": self.beliefs_merged,
             }
 
 

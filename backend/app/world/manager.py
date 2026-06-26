@@ -173,6 +173,13 @@ async def merge_entities(keep_id: str, drop_id: str) -> WorldEntity | None:
     await world_store.delete_attributes(drop_id)
     await world_store.delete_entity(drop_id)
 
+    # Update beliefs referencing merged entity
+    try:
+        from app.belief.manager import on_world_entity_merged
+        await on_world_entity_merged(keep_id, drop_id)
+    except Exception:
+        logger.debug("Belief update failed for entity merge %s->%s", drop_id, keep_id, exc_info=True)
+
     from app.intelligence.metrics import metrics
     metrics.record_world_model_merge()
     return keep
