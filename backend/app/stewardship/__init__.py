@@ -1,0 +1,1 @@
+from .manager import get_stewardship_manager  # ponytail: expose manager
