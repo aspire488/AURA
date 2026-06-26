@@ -56,6 +56,11 @@ class RetrievalMetrics:
     events_processed: int = 0
     subscriber_failures: int = 0
     total_publish_latency_ms: float = 0.0
+    # Identity metrics. ponytail: extend existing, same lock.
+    identities_created: int = 0
+    identity_merges: int = 0
+    identity_resolutions: int = 0
+    relationship_updates: int = 0
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def record_retrieval(self, score: float, latency_ms: float, hit: bool = True) -> None:
@@ -178,6 +183,22 @@ class RetrievalMetrics:
         with self._lock:
             self.subscriber_failures += 1
 
+    def record_identity_created(self) -> None:
+        with self._lock:
+            self.identities_created += 1
+
+    def record_identity_merge(self) -> None:
+        with self._lock:
+            self.identity_merges += 1
+
+    def record_identity_resolution(self) -> None:
+        with self._lock:
+            self.identity_resolutions += 1
+
+    def record_relationship_update(self) -> None:
+        with self._lock:
+            self.relationship_updates += 1
+
     def snapshot(self) -> dict:
         with self._lock:
             ret_count = self.retrieval_count or 1
@@ -234,6 +255,11 @@ class RetrievalMetrics:
                 "average_publish_latency_ms": round(
                     self.total_publish_latency_ms / max(self.events_published, 1), 2
                 ),
+                # Identity metrics
+                "identities_created": self.identities_created,
+                "identity_merges": self.identity_merges,
+                "identity_resolutions": self.identity_resolutions,
+                "relationship_updates": self.relationship_updates,
             }
 
 

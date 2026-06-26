@@ -21,3 +21,11 @@ class MetricsSubscriber:
     async def __call__(self, event: BaseEvent) -> None:
         from app.intelligence.metrics import metrics
         metrics.record_event(event.event_type.value)
+
+
+# ponytail: thin adapter — when Observation System lands, it becomes the
+# single event subscriber and calls IdentityResolver directly.
+class IdentitySubscriber:
+    async def __call__(self, event: BaseEvent) -> None:
+        from app.identity.resolver import resolve_identity
+        await resolve_identity(event)

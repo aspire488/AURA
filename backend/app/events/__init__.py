@@ -2,12 +2,25 @@ from app.events.event import BaseEvent, EventType, EventMetadata
 from app.events.bus import bus
 from app.events.store import event_store
 from app.events.registry import registry
-from app.events.subscriber import ObservationSubscriber, MemorySubscriber, MetricsSubscriber
+from app.events.subscriber import ObservationSubscriber, MemorySubscriber, MetricsSubscriber, IdentitySubscriber
 
 
 def init_events() -> None:
     """Register default subscribers and wire up the bus. Call during startup."""
     from app.events.event import EventType
+
+    # Identity resolution on key events — runs before observation/memory
+    identity_types = [
+        EventType.USER_MESSAGE_RECEIVED,
+        EventType.ASSISTANT_RESPONSE_GENERATED,
+        EventType.TASK_CREATED,
+        EventType.MEMORY_STORED,
+        EventType.BROWSER_ACTION,
+        EventType.CODE_EXECUTED,
+    ]
+    identity_handler = IdentitySubscriber()
+    for et in identity_types:
+        registry.register(et, identity_handler)
 
     registry.register(EventType.USER_MESSAGE_RECEIVED, ObservationSubscriber())
     registry.register(EventType.ASSISTANT_RESPONSE_GENERATED, ObservationSubscriber())
