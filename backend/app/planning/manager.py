@@ -59,7 +59,12 @@ async def pause(plan_id: str) -> Plan | None:
     return await set_status(plan_id, "paused")
 
 async def complete(plan_id: str) -> Plan | None:
-    return await set_status(plan_id, "completed")
+    plan = await set_status(plan_id, "completed")
+    # ponytail: create/refresh reflection on completion
+    if plan:
+        from app.reflection.manager import refresh_for_plan
+        await refresh_for_plan(plan_id)
+    return plan
 
 async def invalidate(plan_id: str) -> Plan | None:
     return await plan_store.invalidate(plan_id)
