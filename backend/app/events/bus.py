@@ -61,6 +61,12 @@ class EventBus:
                     await handler(event)
                 except Exception:
                     logger.exception("Subscriber %s failed for %s", handler.__name__, event.event_type)
+            # ponytail: persist event after subscribers run, don't block on failure
+            try:
+                from app.events.store import event_store
+                await event_store.append(event)
+            except Exception:
+                logger.debug("Event persistence failed for %s", event.event_id)
 
 
 bus = EventBus()
