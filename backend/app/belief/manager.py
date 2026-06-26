@@ -38,6 +38,9 @@ async def update(belief: Belief) -> None:
     # ponytail: update confidence for this belief
     from app.confidence.manager import on_belief_updated
     await on_belief_updated(belief.belief_id)
+    # ponytail: refresh opinions that depend on this belief
+    from app.opinion.manager import on_belief_updated as opinion_belief_updated
+    await opinion_belief_updated(belief.belief_id)
     metrics.record_belief_updated()
 
 
