@@ -30,3 +30,12 @@ class Reflection(BaseModel):
     created_at: float = Field(default_factory=time.time)
     updated_at: float = Field(default_factory=time.time)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+async def process_reflection(reflection: Reflection) -> None:
+    """Hook to derive learning from a completed reflection.
+    ponytail: simple deterministic call – no extra branching.
+    """
+    from app.learning.manager import create_from_reflection
+    await create_from_reflection(reflection)
+

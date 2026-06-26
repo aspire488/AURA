@@ -81,6 +81,10 @@ async def lifespan(app: FastAPI):
 from app.reflection.store import reflection_store
     await opinion_store.initialize()
     await reflection_store.initialize()
+    from app.learning.store import learning_store
+    await learning_store.initialize()
+    from app.continuity.store import continuity_store
+    await continuity_store.initialize()
 
     logger.info("AURA started, version=%s", settings.version)
     yield

@@ -77,6 +77,9 @@ class ReflectionStore:
                     },
                 )
                 await session.commit()
+        # ponytail: after persisting reflection, derive learning
+        from app.reflection.reflection import process_reflection
+        await process_reflection(reflection)
         except Exception:
             logger.exception("Failed to save reflection %s", reflection.reflection_id)
 
