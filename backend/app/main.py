@@ -4,24 +4,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api.health import router as health_router
-from app.api.ingestion import router as ingestion_router
-from app.api.metrics import router as metrics_router
-from app.api.reason import router as reason_router
-from app.api.retrieval import router as retrieval_router
-from app.api.store import router as store_router
-from app.api.conversations import router as conversations_router
-from app.api.tools import router as tools_router
-from app.api.tasks import router as tasks_router
-from app.api.browser import router as browser_router
-from app.api.code import router as code_router
-from app.api.readiness import router as readiness_router
-from app.runtime.browser_ws import router as browser_ws_router
 from app.config import settings
 from app.core.logging import setup_logging
-from app.middleware import RequestMiddleware
-from app.substrate.lifecycle import initialize_substrate, shutdown_substrate
-from app.tools import register_all as register_tools
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -38,6 +22,23 @@ async def emit(event_type, **kwargs):
     await bus.publish(event)
     metrics.record_event_published(round((time.perf_counter() - start) * 1000, 2))
     return event
+
+from app.api.health import router as health_router
+from app.api.ingestion import router as ingestion_router
+from app.api.metrics import router as metrics_router
+from app.api.reason import router as reason_router
+from app.api.retrieval import router as retrieval_router
+from app.api.store import router as store_router
+from app.api.conversations import router as conversations_router
+from app.api.tools import router as tools_router
+from app.api.tasks import router as tasks_router
+from app.api.browser import router as browser_router
+from app.api.code import router as code_router
+from app.api.readiness import router as readiness_router
+from app.runtime.browser_ws import router as browser_ws_router
+from app.middleware import RequestMiddleware
+from app.substrate.lifecycle import initialize_substrate, shutdown_substrate
+from app.tools import register_all as register_tools
 
 
 @asynccontextmanager
@@ -105,3 +106,9 @@ app.include_router(tasks_router)
 app.include_router(browser_router)
 app.include_router(code_router)
 app.include_router(browser_ws_router)
+
+# ponytail: KIO compatibility aliases. Thin routes, same endpoint functions.
+from app.api.retrieval import query_endpoint
+from app.api.store import store_memory
+app.add_api_route("/retrieve", query_endpoint, methods=["POST"], tags=["retrieval"])
+app.add_api_route("/store", store_memory, methods=["POST"], tags=["memory"])
