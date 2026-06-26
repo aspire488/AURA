@@ -121,6 +121,8 @@ app.include_router(tools_router)
 app.include_router(tasks_router)
 app.include_router(browser_router)
 app.include_router(code_router)
+from app.api.validation import router as validation_router
+app.include_router(validation_router)
 app.include_router(browser_ws_router)
 
 # ponytail: KIO compatibility aliases. Thin routes, same endpoint functions.
