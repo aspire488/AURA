@@ -44,6 +44,14 @@ async def evaluate(observation: Observation) -> Memory | None:
 
     await memory_store.append(memory)
     metrics.record_memory_created(importance)
+
+    # ponytail: extract knowledge from new memory, don't block caller on failure
+    try:
+        from app.knowledge.manager import process_memory
+        await process_memory(memory)
+    except Exception:
+        logger.debug("Knowledge extraction failed for memory %s", memory.memory_id, exc_info=True)
+
     return memory
 
 

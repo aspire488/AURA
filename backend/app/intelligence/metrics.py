@@ -70,6 +70,10 @@ class RetrievalMetrics:
     memories_skipped: int = 0
     memory_retrievals: int = 0
     total_importance: float = 0.0
+    # Knowledge metrics. ponytail: extend existing, same lock.
+    knowledge_created: int = 0
+    knowledge_updated: int = 0
+    knowledge_queries: int = 0
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def record_retrieval(self, score: float, latency_ms: float, hit: bool = True) -> None:
@@ -230,6 +234,18 @@ class RetrievalMetrics:
         with self._lock:
             self.memory_retrievals += 1
 
+    def record_knowledge_created(self) -> None:
+        with self._lock:
+            self.knowledge_created += 1
+
+    def record_knowledge_updated(self) -> None:
+        with self._lock:
+            self.knowledge_updated += 1
+
+    def record_knowledge_query(self) -> None:
+        with self._lock:
+            self.knowledge_queries += 1
+
     def snapshot(self) -> dict:
         with self._lock:
             ret_count = self.retrieval_count or 1
@@ -304,6 +320,10 @@ class RetrievalMetrics:
                 "average_importance": round(
                     self.total_importance / max(self.memories_created, 1), 4
                 ),
+                # Knowledge metrics
+                "knowledge_created": self.knowledge_created,
+                "knowledge_updated": self.knowledge_updated,
+                "knowledge_queries": self.knowledge_queries,
             }
 
 
