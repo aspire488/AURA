@@ -58,9 +58,14 @@ async def recompute(confidence_id: str) -> Confidence | None:
     conf = await confidence_store.get(confidence_id)
     if not conf:
         return None
-    # naive: average of 1.0 for each evidence piece, else default 1.0
+    # deterministic: confidence proportional to amount of supporting evidence
     total = len(conf.evidence_knowledge_ids) + len(conf.evidence_observation_ids)
-    conf.value = 1.0 if total == 0 else 0.9  # placeholder simple rule
+    # If confidence record is inactive, set to 0.0
+    if conf.state != "active":
+        conf.value = 0.0
+    else:
+        # Simple smoothing: value = total / (total + 1), yields 0..1, defaults to 0.0 with no evidence
+        conf.value = total / (total + 1) if total > 0 else 0.0
     await update(conf)
     return conf
 
