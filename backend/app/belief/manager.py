@@ -35,6 +35,9 @@ async def update(belief: Belief) -> None:
     from app.intelligence.metrics import metrics
     belief.updated_at = time.time()
     await belief_store.save(belief)
+    # ponytail: update confidence for this belief
+    from app.confidence.manager import on_belief_updated
+    await on_belief_updated(belief.belief_id)
     metrics.record_belief_updated()
 
 
