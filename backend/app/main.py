@@ -1,4 +1,5 @@
 import logging
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -26,6 +27,19 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 
+async def emit(event_type, **kwargs):
+    """Publish an event and record metrics. ponytail: one-liner helper."""
+    from app.events import bus, BaseEvent, EventType
+    from app.intelligence.metrics import metrics
+    if isinstance(event_type, str):
+        event_type = EventType(event_type)
+    event = BaseEvent(event_type=event_type, **kwargs)
+    start = time.perf_counter()
+    await bus.publish(event)
+    metrics.record_event_published(round((time.perf_counter() - start) * 1000, 2))
+    return event
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -36,10 +50,19 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("Configuration error: " + "; ".join(errors))
     register_tools()
     await initialize_substrate(app)
+
+    from app.events import init_events, event_store
+    from app.events import bus as event_bus
+    init_events()
+    await event_store.initialize()
+    await event_bus.start()
+
     logger.info("AURA started, version=%s", settings.version)
     yield
     # Graceful shutdown
     logger.info("AURA shutting down")
+    from app.events import bus as event_bus_shutdown
+    await event_bus_shutdown.stop()
     from app.runtime.browser_client import browser_client
     if browser_client.is_connected():
         await browser_client.disconnect()

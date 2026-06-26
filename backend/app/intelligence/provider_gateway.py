@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import httpx
 
 from app.config import settings
+from app.main import emit
 
 logger = logging.getLogger(__name__)
 
@@ -51,10 +52,12 @@ class ProviderGateway:
                 result = await self._call_provider(
                     provider_name, system_prompt, user_prompt, model, temperature, max_tokens
                 )
+                await emit("provider_invoked", source="provider_gateway", payload={"provider": provider_name, "model": result.model, "latency_ms": result.latency_ms, "prompt_tokens": result.prompt_tokens, "completion_tokens": result.completion_tokens})
                 return result
             except Exception as e:
                 self._provider_failures[provider_name] = self._provider_failures.get(provider_name, 0) + 1
                 self._provider_fallbacks += 1
+                await emit("provider_failed", source="provider_gateway", payload={"provider": provider_name, "error": str(e)})
                 logger.warning("Provider %s failed: %s, trying next", provider_name, e)
                 errors.append(f"{provider_name}: {e}")
         raise RuntimeError(f"All providers failed: {'; '.join(errors)}")

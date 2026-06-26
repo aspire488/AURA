@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 from app.runtime.task_manager import get_task_manager
 from app.intelligence.metrics import metrics
+from app.main import emit
 
 router = APIRouter(tags=["tasks"])
 
@@ -43,6 +44,7 @@ async def cancel_task(task_id: str):
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     metrics.record_task_cancelled()
+    await emit("task_completed", source="api/tasks", payload={"task_id": task_id, "success": False, "cancelled": True})
     return TaskResponse(**task.__dict__)
 
 

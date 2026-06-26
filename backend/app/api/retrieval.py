@@ -14,6 +14,7 @@ from app.models.query import (
 )
 from app.providers.factory import get_provider
 from app.services.chroma_service import ChromaService
+from app.main import emit
 
 router = APIRouter(prefix="/retrieval", tags=["retrieval"])
 
@@ -26,6 +27,7 @@ async def query_endpoint(
     provider = get_provider()
     embeddings = await provider.embed([body.query])
     results = chroma.query(embeddings[0], top_k=body.top_k)
+    await emit("memory_retrieved", source="api/retrieval", payload={"query": body.query[:100], "result_count": len(results)})
     return QueryResponse(results=[QueryResult(**r) for r in results])
 
 

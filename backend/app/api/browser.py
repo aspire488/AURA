@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from app.intelligence.metrics import metrics
 from app.runtime.browser_client import browser_client
+from app.main import emit
 
 router = APIRouter(tags=["browser"])
 
@@ -38,4 +39,5 @@ async def browser_execute(body: BrowserExecuteRequest):
     result = await browser_client.execute(body.action, body.params)
     latency_ms = round((time.perf_counter() - start) * 1000, 2)
     metrics.record_browser(latency_ms, result.get("success", False))
+    await emit("browser_action", source="api/browser", payload={"action": body.action, "success": result.get("success", False), "latency_ms": latency_ms})
     return BrowserExecuteResponse(success=result.get("success", False), result=result)

@@ -10,6 +10,7 @@ from app.intelligence.memory_ranker import score_importance
 from app.intelligence.metrics import metrics
 from app.services.chroma_service import ChromaService
 from app.services.redis_service import RedisService
+from app.main import emit
 
 
 class MemoryAdapter:
@@ -76,4 +77,5 @@ class MemoryAdapter:
         )
 
         metrics.record_store(is_duplicate=False)
+        await emit("memory_stored", session_id=conversation_id, source="memory_adapter", payload={"memory_type": memory_type, "importance": importance, "role": role})
         return {"status": "stored", "memory_type": memory_type, "importance": importance}

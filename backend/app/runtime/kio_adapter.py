@@ -18,6 +18,7 @@ from app.runtime.tool_planner import plan_tool, extract_tool_args, classify_plan
 from app.runtime.tool_registry import registry
 from app.runtime.agent_state import get_agent_state
 from app.runtime.execution_engine import engine as execution_engine
+from app.main import emit
 
 logger = logging.getLogger(__name__)
 
@@ -154,8 +155,10 @@ class KIOAdapter:
                         await agent.set_active_tools(session_id, [tool_name])
                     except Exception:
                         pass
+                await emit("tool_execution_started", session_id=session_id, source="kio_adapter", payload={"tool": tool_name})
                 kwargs = extract_tool_args(tool_name, request.query)
                 result = await registry.execute(tool_name, **kwargs)
+                await emit("tool_execution_completed", session_id=session_id, source="kio_adapter", payload={"tool": tool_name, "success": True})
                 if session_id:
                     try:
                         await agent.set_active_tools(session_id, [])
@@ -169,6 +172,7 @@ class KIOAdapter:
                     citations=[], warnings=[], session_id=session_id, latency_ms=latency,
                 )
             except Exception as e:
+                await emit("tool_execution_completed", session_id=session_id, source="kio_adapter", payload={"tool": tool_name, "success": False, "error": str(e)})
                 logger.warning("Tool %s failed: %s, falling through to LLM", tool_name, e)
 
         # 6. Full LLM pipeline

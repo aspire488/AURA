@@ -2,8 +2,9 @@
 
 ## Architecture
 
-- **Backend** (`backend/`): FastAPI, decision layer. Do not modify.
-- **Extension** (`extension/`): Chrome Manifest V3, execution layer. Communicates with backend via WebSocket.
+- **Backend** (`backend/`): FastAPI, decision layer. Event-driven cognitive subsystem.
+- **Extension** (`extension/`): Chrome Manifest V3, execution layer. Communicates via WebSocket.
+- **Event System** (`backend/app/events/`): In-process pub/sub + PostgreSQL persistence. First cognitive subsystem.
 
 ## Extension Protocol
 
@@ -22,6 +23,27 @@ Backend WebSocket at `ws://localhost:8000/ws/browser`.
 Supported actions: `open_url`, `open_tab`, `close_tab`, `activate_tab`, `search_google`.
 
 See `backend/app/runtime/browser_client.py` for the full protocol.
+
+## Event System
+
+Every significant action emits a `BaseEvent` via `emit()` from `app.main`.
+
+**Publishing events:**
+```python
+from app.main import emit
+await emit("user_message_received", session_id=sid, source="api/reason", payload={"query": query})
+```
+
+**Event types** (`app/events/event.py`): `USER_MESSAGE_RECEIVED`, `ASSISTANT_RESPONSE_GENERATED`, `TOOL_EXECUTION_STARTED`, `TOOL_EXECUTION_COMPLETED`, `TASK_CREATED`, `TASK_COMPLETED`, `MEMORY_STORED`, `MEMORY_RETRIEVED`, `BROWSER_ACTION`, `CODE_EXECUTED`, `PROVIDER_INVOKED`, `PROVIDER_FAILED`, `REASONING_STARTED`, `REASONING_COMPLETED`, `REFLECTION_CREATED`.
+
+**Adding a new subscriber** (`app/events/__init__.py`):
+1. Create handler class implementing `async def __call__(self, event: BaseEvent) -> None`
+2. Register in `init_events()` with `registry.register(EventType.X, Handler())`
+3. Wire into bus: `bus.subscribe(EventType.X, handler)`
+
+**Event store**: PostgreSQL `events` table, auto-created on startup. Query via `event_store.list_by_session()`, `event_store.latest()`, etc.
+
+**Metrics**: Event counts tracked in existing `RetrievalMetrics` singleton (`events_published`, `events_processed`, `subscriber_failures`).
 
 ## Extension Structure
 
@@ -58,3 +80,6 @@ cd backend && uvicorn app.main:app --reload --port 8000
 - Popup reads status from `chrome.storage.local`, not directly from background
 - Extension auto-reconnects after 2s on disconnect
 - Heartbeat every 30s keeps connection alive
+- Event bus starts during FastAPI lifespan; `emit()` is a no-op if called before startup
+- `emit()` returns the `BaseEvent` for chaining; always pass `source=` for traceability
+- Events persist to PostgreSQL; if DB is down, events log errors but don't block the caller

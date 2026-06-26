@@ -13,6 +13,7 @@ from app.models.store import MemoryStatsResponse, StoreRequest, StoreResponse
 from app.providers.factory import get_provider
 from app.services.chroma_service import ChromaService
 from app.services.redis_service import RedisService
+from app.main import emit
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,7 @@ async def store_memory(
     )
 
     metrics.record_store(is_duplicate=False)
+    await emit("memory_stored", source="api/store", payload={"memory_type": memory_type, "importance": importance, "role": body.role})
     return StoreResponse(status="stored", memory_type=memory_type, importance=importance)
 
 
