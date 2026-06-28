@@ -1,5 +1,4 @@
-cat > /home/claude/README_v2.md << 'ENDOFREADME'
-<div align="center">
+
 
 <!-- HERO BANNER -->
 <picture>
