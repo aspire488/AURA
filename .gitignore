@@ -53,3 +53,4 @@ __pycache__/
 .env
 .env.*
 aura.db
+aura.db
