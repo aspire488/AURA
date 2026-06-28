@@ -45,3 +45,10 @@ imports/
 # Node
 node_modules/
 opencode.json
+backups/
+data/
+logs/
+__pycache__/
+*.pyc
+.env
+.env.*
