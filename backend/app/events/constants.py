@@ -1,0 +1,1 @@
+BELIEF_REVISION_CONTRADICTION_SOURCE = "belief_revision/contradiction"

@@ -171,10 +171,11 @@ async def lifespan(app: FastAPI):
     # PHASE 3 – Recovery & event emission
     # -------------------
     # Recover persisted state (active goals, pending tasks, conversations, …).
-    active_goals = await goal_store.list_all(status="active")
-    logger.info(f"Recovery – emitting GOAL_UPDATED for {len(active_goals)} active goals @ {__import__('datetime').datetime.utcnow().isoformat()}")
-    for _g in active_goals:
-        await emit(EventType.GOAL_UPDATED, session_id=_g.goal_id, source="recovery", payload=_g.model_dump())
+# ponytail: skip goal emission during startup to avoid recursive event cascade
+    # active_goals = await goal_store.list_all(status="active")
+    # logger.info(f"Recovery – emitting GOAL_UPDATED for {len(active_goals)} active goals @ {__import__('datetime').datetime.utcnow().isoformat()}")
+    # for _g in active_goals:
+    #     await emit(EventType.GOAL_UPDATED, session_id=_g.goal_id, source="recovery", payload=_g.model_dump())
     # TODO: recover pending tasks, conversations, etc.
 
     # -------------------

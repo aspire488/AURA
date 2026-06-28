@@ -11,6 +11,7 @@ scaling, detect contradictions, and create new Beliefs as needed.
 from __future__ import annotations
 
 import logging
+from app.events.constants import BELIEF_REVISION_CONTRADICTION_SOURCE
 import time
 from typing import List
 
@@ -220,7 +221,7 @@ async def process_observation(obs: Observation) -> dict:
             await emit(
                 EventType.BELIEF_UPDATED,
                 session_id="",
-                source="belief_revision/contradiction",
+                source=BELIEF_REVISION_CONTRADICTION_SOURCE,
                 payload={
                     "belief_id": existing.belief_id,
                     "observation_id": obs.observation_id,

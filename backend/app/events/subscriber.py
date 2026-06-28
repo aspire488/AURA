@@ -48,9 +48,13 @@ class BeliefUpdatedSubscriber:
     async def __call__(self, event: BaseEvent) -> None:
         # Deterministic belief revision from promoted Knowledge
         from app.belief.revision import revise
+        # Skip recursive revision when triggered by a drift detection event
+        if event.source == BELIEF_REVISION_CONTRADICTION_SOURCE:
+            return
         report = await revise()
         # Log revision report
-        import logging
+import logging
+from .constants import BELIEF_REVISION_CONTRADICTION_SOURCE
         logging.getLogger(__name__).debug("Belief revision report: %s", report)
         # Fetch the most recent active belief and update consolidated metrics
         from app.belief.store import belief_store
