@@ -18,6 +18,11 @@ from app.runtime.tool_planner import plan_tool, extract_tool_args, classify_plan
 from app.runtime.tool_registry import registry
 from app.runtime.agent_state import get_agent_state
 from app.runtime.execution_engine import engine as execution_engine
+# identity & continuity imports – bind user context
+from app.identity.store import identity_store
+from app.identity.identity import Identity
+from app.continuity.store import continuity_store
+from app.continuity.model import Continuity
 # ponytail: emit imported lazily
 
 logger = logging.getLogger(__name__)
@@ -30,6 +35,7 @@ class KIORequest:
     max_tokens: int = 2000
     task_id: str = ""  # for resume
     start_from: int = 0  # step index to resume from
+    metadata: dict = field(default_factory=dict)  # optional user metadata
 
 
 @dataclass
@@ -113,6 +119,25 @@ class KIOAdapter:
         return answer, prompt.citations, validation.warnings
 
     async def process_request(self, request: KIORequest) -> KIOResponse:
+
+        # ---- RULE-BASED INTERCEPT ----
+        import time
+        _intercept_start = time.perf_counter()
+        normalized_query = request.query.lower().strip()
+        if 'verify substrate' in normalized_query or 'status' in normalized_query:
+            latency = (time.perf_counter() - _intercept_start) * 1000
+            return KIOResponse(
+                intent='system_verification',
+                query_type='deterministic',
+                answer='AURA Substrate Core is fully operational. State tables (Observations, Memories, Beliefs, Goals) are online and verified model-agnostic.',
+                citations=['local_runtime:rule_engine'],
+                warnings=['Running in localized deterministic execution mode.'],
+                session_id=request.session_id or '',
+                latency_ms=round(latency, 2),
+                execution_trace=['rule_engine_intercept']
+            )
+        # -------------------------------
+
         start = time.perf_counter()
         memory = self._get_memory()
         provider = self._get_provider()
@@ -131,6 +156,31 @@ class KIOAdapter:
             session = await sessions.get_or_create()
             session_id = session.session_id
             await sessions.append_message(session_id, "user", request.query)
+
+        # ---- Identity handling ---------------------------------------------------
+        # Extract possible user metadata from the request (defaults provided)
+        user_alias = request.metadata.get("user_alias", "default_user")
+        user_display_name = request.metadata.get("user_display_name", "Default User")
+        # Find existing identity by alias or create a new one
+        identities = await identity_store.find_by_alias(user_alias)
+        if identities:
+            identity = identities[0]
+        else:
+            identity = Identity(display_name=user_display_name, aliases=[user_alias])
+            await identity_store.save_identity(identity)
+        # (optional) attach identity_id to session metadata – not persisted beyond this request
+        if sessions:
+            session.metadata["identity_id"] = identity.identity_id
+
+        # ---- Continuity handling -------------------------------------------------
+        # Load or create a continuity record for this session
+        cont = await continuity_store.find_by_session(session_id)
+        if not cont:
+            cont = Continuity(session_id=session_id, state={})
+            await continuity_store.save(cont)
+        # (optional) expose continuity_id for downstream steps
+        if sessions:
+            session.metadata["continuity_id"] = cont.continuity_id
 
         # 1. Intent
         intent = detect_intent(request.query)

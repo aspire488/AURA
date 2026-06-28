@@ -2,7 +2,7 @@ import json
 import logging
 import zipfile
 from pathlib import Path
-from typing import List, Dict, Any, Callable
+from typing import List, Dict, Any, Callable, Optional
 
 from .manager import register_importer, import_records
 
@@ -47,7 +47,16 @@ def _flatten_messages(conversations: List[Dict[str, Any]]) -> List[Dict[str, Any
                 "timestamp": msg.get("timestamp") or msg.get("create_time"),
                 "author_role": msg.get("author", {}).get("role", msg.get("role")),
                 "content": msg.get("content") or msg.get("text"),
-                "parent_message_id": prev_msg_id,  # ponytail: simple parent link
+                # Preserve optional fields when present
+                "metadata": msg.get("metadata"),
+                "attachments": msg.get("attachments"),
+                "files": msg.get("files"),
+                "parent_message_id": msg.get("parent_message_id", prev_msg_id),  # use explicit parent if given
+                # conversation‑level context
+                "conversation_title": conv.get("title"),
+                "conversation_metadata": conv.get("metadata"),
+                "conversation_create_time": conv.get("create_time"),
+                "conversation_update_time": conv.get("update_time"),
             }
             payload["external_id"] = f"{conv_id}:{msg_id}"
             records.append(payload)

@@ -1,0 +1,101 @@
+{
+  "nodes": [
+    {
+      "id": "scheduleTrigger",
+      "name": "Every Minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "parameters": {
+        "interval": "everyMinute",
+        "timeZone": "UTC"
+      },
+      "startNode": true
+    },
+    {
+      "id": "dockerPs",
+      "name": "Docker PS",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "parameters": {
+        "command": "docker",
+        "arguments": "ps --format \"{{.Names}}|{{.Status}}\"",
+        "timeout": 30,
+        "options": {
+          "retries": 3,
+          "retryDelay": 5000
+        }
+      }
+    },
+    {
+      "id": "parse",
+      "name": "Parse Services",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "parameters": {
+        "functionCode": "const lines = $input.item.json.stdout.split('\n');\nconst services = [];\nfor (const line of lines) {\n  if (!line.trim()) continue;\n  const [name, status] = line.split('|');\n  services.push({ name, status });\n}\nreturn [{ json: { services, timestamp: new Date().toISOString() } }];",
+        "options": {
+          "retries": 2,
+          "retryDelay": 2000,
+          "timeout": 10
+        }
+      }
+    },
+    {
+      "id": "evaluate",
+      "name": "Health Evaluation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "parameters": {
+        "functionCode": "const required = ['aura-redis','aura-neo4j','aura-chromadb','aura-n8n'];\nconst services = $input.item.json.services;\nlet healthy = true;\nconst failed = [];\nfor (const r of required) {\n  const s = services.find(x=>x.name===r);\n  if (!s || !s.status.startsWith('Up')) { healthy = false; failed.push(r); }\n}\nreturn [{ json: { status: healthy?'HEALTHY':'DEGRADED', failed, timestamp: $input.item.json.timestamp } }];",
+        "options": {
+          "retries": 2,
+          "retryDelay": 2000,
+          "timeout": 10
+        }
+      }
+    },
+    {
+      "id": "post",
+      "name": "Post to Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "parameters": {
+        "url": "http://localhost:8000/api/v1/automation/ingest",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {
+          "retries": 3,
+          "retryDelay": 3000,
+          "timeout": 20
+        },
+        "bodyParametersJson": "{{ $json }}"
+      }
+    },
+    {
+      "id": "alert",
+      "name": "Slack Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "channel": "#aura-monitor",
+        "text": "Infrastructure health degraded: {{ $json.failed.join(', ') }}",
+        "options": {
+          "retries": 2,
+          "retryDelay": 2000,
+          "timeout": 10
+        }
+      }
+    }
+  ],
+  "connections": {
+    "scheduleTrigger": [ { "node": "dockerPs", "type": "main", "index": 0 } ],
+    "dockerPs": [ { "node": "parse", "type": "main", "index": 0 } ],
+    "parse": [ { "node": "evaluate", "type": "main", "index": 0 } ],
+    "evaluate": [ { "node": "post", "type": "main", "index": 0 }, { "node": "alert", "type": "main", "index": 0, "condition": "{{ $json.status === 'DEGRADED' }}" } ]
+  },
+  "name": "Infrastructure Monitor",
+  "active": true,
+  "settings": { "workflowMetaData": { "id": "INFRA_MONITOR", "name": "Infrastructure Monitor", "description": "Monitors Docker container health and reports to backend.", "version": 1 } }
+}

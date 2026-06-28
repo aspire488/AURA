@@ -20,6 +20,8 @@ _EVENT_TO_OBSERVATION: dict[EventType, ObservationType] = {
     EventType.REASONING_STARTED: ObservationType.REASONING,
     EventType.REASONING_COMPLETED: ObservationType.REASONING,
     EventType.REFLECTION_CREATED: ObservationType.REFLECTION,
+    # ponytail: map historical import to reflection observation
+    EventType.HISTORICAL_IMPORT: ObservationType.REFLECTION,
 }
 
 

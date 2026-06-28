@@ -9,6 +9,5 @@ def get_chroma() -> ChromaService:
     return ChromaService()
 
 
-@lru_cache
 def get_redis() -> RedisService:
     return RedisService()

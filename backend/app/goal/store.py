@@ -31,11 +31,21 @@ class GoalStore:
     async def initialize(self) -> None:
         try:
             async with get_session() as session:
-                for stmt in CREATE_GOAL_TABLE.strip().split(";"):
-                    stmt = stmt.strip()
-                    if stmt:
-                        await session.execute(text(stmt))
-                await session.commit()
+                async with session.begin():
+                    # ponytail: indentation verified
+                    for stmt in CREATE_GOAL_TABLE.strip().split(";"):
+                        stmt = stmt.strip()
+                        if stmt:
+                            # ponytail: SQLite sanitization
+                            is_sqlite = "sqlite" in str(session.bind.url)
+                            if is_sqlite:
+                                if "USING GIN" in stmt or "using gin" in stmt.lower():
+                                    continue
+                                stmt = stmt.replace("JSONB", "JSON")
+                                stmt = stmt.replace("TIMESTAMPTZ", "DATETIME")
+                                stmt = stmt.replace("NOW()", "CURRENT_TIMESTAMP")
+                                stmt = stmt.replace("DOUBLE PRECISION", "REAL")
+                            await session.execute(text(stmt))
             logger.info("Goal table ready")
         except Exception:
             logger.exception("Failed to initialize goal table")
@@ -84,6 +94,17 @@ class GoalStore:
                     text("SELECT * FROM goals ORDER BY created_at DESC LIMIT :limit"),
                     {"limit": limit},
                 )
+            return [self._row_to_goal(row) for row in result.mappings()]
+
+    async def list_by_statuses(self, statuses: list[str], limit: int = 100) -> list[Goal]:
+        """Query goals matching any of the given statuses. ponytail: used by goal_monitor."""
+        if not statuses:
+            return []
+        async with get_session() as session:
+            result = await session.execute(
+                text("SELECT * FROM goals WHERE status IN :statuses ORDER BY priority DESC, created_at DESC LIMIT :limit"),
+                {"statuses": tuple(statuses), "limit": limit},
+            )
             return [self._row_to_goal(row) for row in result.mappings()]
 
     async def find_by_opinion(self, opinion_id: str) -> list[Goal]:

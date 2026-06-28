@@ -38,11 +38,21 @@ class ObservationStore:
     async def initialize(self) -> None:
         try:
             async with get_session() as session:
-                for stmt in CREATE_OBSERVATIONS_TABLE.strip().split(";"):
-                    stmt = stmt.strip()
-                    if stmt:
-                        await session.execute(text(stmt))
-                await session.commit()
+                async with session.begin():
+                    # ponytail: indentation verified
+                    for stmt in CREATE_OBSERVATIONS_TABLE.strip().split(";"):
+                        stmt = stmt.strip()
+                        if stmt:
+                            # ponytail: SQLite sanitization
+                            is_sqlite = "sqlite" in str(session.bind.url)
+                            if is_sqlite:
+                                if "USING GIN" in stmt or "using gin" in stmt.lower():
+                                    continue
+                                stmt = stmt.replace("JSONB", "JSON")
+                                stmt = stmt.replace("TIMESTAMPTZ", "DATETIME")
+                                stmt = stmt.replace("NOW()", "CURRENT_TIMESTAMP")
+                                stmt = stmt.replace("DOUBLE PRECISION", "REAL")
+                            await session.execute(text(stmt))
             logger.info("Observations table ready")
         except Exception:
             logger.exception("Failed to initialize observations table")

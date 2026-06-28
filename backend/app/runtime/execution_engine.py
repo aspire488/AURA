@@ -82,6 +82,11 @@ class ExecutionResult:
     tool_outputs: dict[str, str]  # tool_name -> output for context passing
 
 
+def _is_external_step(tool_name: str) -> bool:
+    """ponytail: prefix check, no config, no registry. Two prefixes cover it."""
+    return tool_name.startswith(("automation:", "n8n:"))
+
+
 class ExecutionEngine:
     """Sequential step executor with context passing.
 
@@ -94,6 +99,7 @@ class ExecutionEngine:
         plan: ExecutionPlan,
         start_from: int = 0,
         llm_callback: Any = None,
+        identity_id: str | None = None,
     ) -> ExecutionResult:
         """Execute plan steps sequentially starting from start_from.
 
@@ -124,8 +130,21 @@ class ExecutionEngine:
                     if step.query in tool_outputs and tool_outputs[step.query]:
                         step.output = tool_outputs[step.query]
                         step.status = "completed"
+                    elif _is_external_step(step.tool_name):
+                        # ponytail: lazy import avoids circular dep with app.main
+                        from app.runtime.automation_fabric import AutomationRequest, automation_fabric
+                        category = step.tool_name.split(":", 1)[1] if ":" in step.tool_name else "general"
+                        request = AutomationRequest(
+                            workflow_category=category,
+                            target_node=category,
+                            parameters=step.tool_args,
+                            session_id=identity_id or "",
+                        )
+                        result = await automation_fabric.dispatch(request)
+                        step.output = str(result)
+                        tool_outputs[step.query] = step.output
                     else:
-                        result = await registry.execute(step.tool_name, **step.tool_args)
+                        result = await registry.execute(step.tool_name, identity_id=identity_id, **step.tool_args)
                         step.output = str(result)
                         tool_outputs[step.query] = step.output
                 elif llm_callback:

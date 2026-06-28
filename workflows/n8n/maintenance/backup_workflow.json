@@ -1,0 +1,54 @@
+{
+  "nodes": [
+    {
+      "id": "dailyTrigger",
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "parameters": {"cronExpression": "0 2 * * *", "timeZone": "UTC"},
+      "startNode": true
+    },
+    {
+      "id": "callBackup",
+      "name": "Call Backup API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "parameters": {
+        "url": "http://localhost:8000/admin/backup",
+        "method": "POST",
+        "options": {"retries": 3, "retryDelay": 5000, "timeout": 30},
+        "responseFormat": "json"
+      }
+    },
+    {
+      "id": "logResult",
+      "name": "Log Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "parameters": {
+        "values": {"key": "backup_path", "value": "{{ $json.backup_path }}"}
+      }
+    },
+    {
+      "id": "slackNotify",
+      "name": "Slack Notify",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "channel": "#aura-backups",
+        "text": "Backup created: {{ $json.backup_path }}",
+        "options": {"retries": 2, "retryDelay": 2000, "timeout": 10}
+      }
+    }
+  ],
+  "connections": {
+    "dailyTrigger": [{"node": "callBackup", "type": "main", "index": 0}],
+    "callBackup": [{"node": "logResult", "type": "main", "index": 0}, {"node": "slackNotify", "type": "main", "index": 0}],
+    "logResult": [{"node": "slackNotify", "type": "main", "index": 0}]
+  },
+  "name": "Daily Backup",
+  "active": true,
+  "settings": {"workflowMetaData": {"id": "DAILY_BACKUP", "name": "Daily Backup", "description": "Creates daily data archive and notifies Slack.", "version": 1}}
+}

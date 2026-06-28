@@ -1,0 +1,44 @@
+{
+  "nodes": [
+    {
+      "id": "schedule",
+      "name": "15min Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "parameters": {"cronExpression": "*/15 * * * *", "timeZone": "UTC"},
+      "startNode": true
+    },
+    {
+      "id": "fetch",
+      "name": "Fetch DLQ",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "parameters": {
+        "url": "http://localhost:8000/dlq/",
+        "method": "GET",
+        "responseFormat": "json",
+        "options": {"retries": 3, "retryDelay": 2000, "timeout": 20}
+      }
+    },
+    {
+      "id": "slack",
+      "name": "Slack Notify",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "channel": "#aura-ops",
+        "text": "DLQ contains {{ $json.length }} entries. Review required.",
+        "options": {"retries": 2, "retryDelay": 2000, "timeout": 10}
+      }
+    }
+  ],
+  "connections": {
+    "schedule": [{"node": "fetch", "type": "main", "index": 0}],
+    "fetch": [{"node": "slack", "type": "main", "index": 0}]
+  },
+  "name": "DLQ Replayer",
+  "active": true,
+  "settings": {"workflowMetaData": {"id": "DLQ_REPLAYER", "name": "DLQ Replayer", "description": "Polls DLQ and notifies ops.", "version": 1}}
+}

@@ -1,0 +1,58 @@
+{
+  "nodes": [
+    {
+      "id": "schedule",
+      "name": "Every 5min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "parameters": {"cronExpression": "*/5 * * * *", "timeZone": "UTC"},
+      "startNode": true
+    },
+    {
+      "id": "probe",
+      "name": "Probe Provider",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "parameters": {
+        "url": "{{ $env.PROVIDER_HEALTH_URL }}",
+        "method": "GET",
+        "responseFormat": "json",
+        "options": {"retries": 2, "retryDelay": 2000, "timeout": 10}
+      }
+    },
+    {
+      "id": "post",
+      "name": "Post Health",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "parameters": {
+        "url": "http://localhost:8000/api/v1/automation/ingest",
+        "method": "POST",
+        "jsonParameters": true,
+        "bodyParametersJson": "{{ $json }}",
+        "options": {"retries": 3, "retryDelay": 2000, "timeout": 20}
+      }
+    },
+    {
+      "id": "alert",
+      "name": "Slack Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "channel": "#aura-monitor",
+        "text": "Provider health check failed: {{ $json.error || 'OK' }}",
+        "options": {"retries": 2, "retryDelay": 2000, "timeout": 10},
+        "condition": "{{ $json.status != 'ok' }}"
+      }
+    }
+  ],
+  "connections": {
+    "schedule": [{"node": "probe", "type": "main", "index": 0}],
+    "probe": [{"node": "post", "type": "main", "index": 0}, {"node": "alert", "type": "main", "index": 0}]
+  },
+  "name": "Provider Health Monitor",
+  "active": true,
+  "settings": {"workflowMetaData": {"id": "PROVIDER_HEALTH", "name": "Provider Health Monitor", "description": "Checks external provider health endpoint.", "version": 1}}
+}

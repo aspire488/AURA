@@ -4,11 +4,38 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+import sqlalchemy
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.config import settings
 from app.core.logging import setup_logging
 
 setup_logging()
 logger = logging.getLogger(__name__)
+
+# Unique Engine Tracer: 0xDEADBEEF_FORCE_INIT
+_original_execute = AsyncSession.execute
+
+async def _patched_execute(self, statement, *args, **kwargs):
+    """
+    Global Runtime Substrate Interceptor.
+    ponytail: Hard structural patch for dynamic fallback translation.
+    """
+    if hasattr(statement, 'text'):
+        text_str = statement.text
+        if "sqlite" in str(self.bind.url):
+            if "using gin" in text_str.lower():
+                return None
+            text_str = text_str.replace("JSONB", "JSON")
+            text_str = text_str.replace("TIMESTAMPTZ", "DATETIME")
+            text_str = text_str.replace("NOW()", "CURRENT_TIMESTAMP")
+            text_str = text_str.replace("DOUBLE PRECISION", "REAL")
+            statement = text(text_str)
+    return await _original_execute(self, statement, *args, **kwargs)
+
+AsyncSession.execute = _patched_execute
+print("--> AURA COGNITIVE DIALECT PATCH RUNTIME ACTIVATED <--")
 
 
 async def emit(event_type, **kwargs):
@@ -36,9 +63,15 @@ from app.api.browser import router as browser_router
 from app.api.code import router as code_router
 from app.api.readiness import router as readiness_router
 from app.runtime.browser_ws import router as browser_ws_router
+
 from app.middleware import RequestMiddleware
 from app.substrate.lifecycle import initialize_substrate, shutdown_substrate
+from app.api.kio import router as kio_router
+from app.runtime.automation_fabric import AutomationFabric, AutomationRequest
+
 from app.tools import register_all as register_tools
+
+automation_fabric = AutomationFabric()
 
 
 @asynccontextmanager
@@ -50,6 +83,37 @@ async def lifespan(app: FastAPI):
         logger.error("Startup validation failed: %s", "; ".join(errors))
         raise RuntimeError("Configuration error: " + "; ".join(errors))
     register_tools()
+    # Auto‑register providers from configuration
+    from app.integrations.manager import integration_manager
+    provider_names = [p.strip() for p in settings.provider_priority.split(",") if p.strip()]
+    # Basic OAuth URL mapping (extend as needed)
+    oauth_map = {
+        "github": ("https://github.com/login/oauth/access_token", "https://github.com/login/oauth/authorize"),
+        "gmail": ("https://oauth2.googleapis.com/token", "https://accounts.google.com/o/oauth2/auth"),
+        "google_calendar": ("https://oauth2.googleapis.com/token", "https://accounts.google.com/o/oauth2/auth"),
+        "google_drive": ("https://oauth2.googleapis.com/token", "https://accounts.google.com/o/oauth2/auth"),
+        "discord": ("https://discord.com/api/oauth2/token", "https://discord.com/api/oauth2/authorize"),
+        "slack": ("https://slack.com/api/oauth.v2.access", "https://slack.com/oauth/v2/authorize"),
+        "telegram": ("", ""),  # Bot token based – no OAuth
+        "whatsapp": ("", ""),
+        "notion": ("https://api.notion.com/v1/oauth/token", "https://api.notion.com/v1/oauth/authorize"),
+        "dropbox": ("https://api.dropboxapi.com/oauth2/token", "https://www.dropbox.com/oauth2/authorize"),
+        "onedrive": ("https://login.microsoftonline.com/common/oauth2/v2.0/token", "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"),
+        "outlook": ("https://login.microsoftonline.com/common/oauth2/v2.0/token", "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"),
+    }
+    for name in provider_names:
+        token_url, auth_url = oauth_map.get(name.lower(), ("", ""))
+        integration_manager.register(
+            name=name,
+            oauth_token_url=token_url,
+            oauth_authorize_url=auth_url,
+            scopes=[],
+            capabilities=[],
+        )
+
+    # Initialise persistent credential store
+    from app.integrations.credential_store import credential_store
+    await credential_store.init()
     await initialize_substrate(app)
 
     from app.events import init_events, event_store
@@ -79,6 +143,11 @@ async def lifespan(app: FastAPI):
     await confidence_store.initialize()
     from app.goal.store import goal_store
     await goal_store.initialize()
+    # ponytail: Recover active goals on startup – emit goal_created for each
+    from app.goal.store import goal_store as _gs
+    active_goals = await _gs.list_all(status="active")
+    for _g in active_goals:
+        await emit("goal_created", session_id=_g.goal_id, source="recovery", payload=_g.model_dump())
     from app.reasoning.store import reasoning_store
     await reasoning_store.initialize()
     from app.opinion.store import opinion_store
@@ -87,6 +156,7 @@ async def lifespan(app: FastAPI):
     await reflection_store.initialize()
     from app.learning.store import learning_store
     await learning_store.initialize()
+
     from app.continuity.store import continuity_store
     await continuity_store.initialize()
 
@@ -95,6 +165,9 @@ async def lifespan(app: FastAPI):
     _provider = get_provider()
     await _provider.embed(["init"])
     logger.info("AURA started, version=%s", settings.version)
+    # Initialize Agent Layer
+    from app.agents.bootstrap import _lifecycle_manager as _agent_lifecycle
+    await _agent_lifecycle.initialize_all()
     yield
     # Graceful shutdown
     logger.info("AURA shutting down")
@@ -106,6 +179,8 @@ async def lifespan(app: FastAPI):
     await shutdown_substrate(app)
     from app.intelligence.provider_gateway import gateway
     await gateway.close()
+    # Shutdown Agent Layer
+    await _agent_lifecycle.shutdown_all()
     logger.info("AURA shutdown complete")
 
 
@@ -115,6 +190,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.include_router(kio_router)
 app.add_middleware(RequestMiddleware)
 
 app.include_router(health_router)
@@ -132,9 +208,58 @@ app.include_router(code_router)
 from app.api.validation import router as validation_router
 app.include_router(validation_router)
 app.include_router(browser_ws_router)
+from app.api.backup import router as backup_router
+app.include_router(backup_router)
+from app.api.integrations import router as integrations_router
+app.include_router(integrations_router)
+from app.api.dlq import router as dlq_router
+app.include_router(dlq_router)
 
 # ponytail: KIO compatibility aliases. Thin routes, same endpoint functions.
 from app.api.retrieval import query_endpoint
 from app.api.store import store_memory
 app.add_api_route("/retrieve", query_endpoint, methods=["POST"], tags=["retrieval"])
 app.add_api_route("/store", store_memory, methods=["POST"], tags=["memory"])
+
+# ponytail: expose KIO endpoint directly for commissioning
+from app.runtime.kio_adapter import kio, KIORequest, KIOResponse
+async def _kio_endpoint(body: KIORequest) -> KIOResponse:
+    return await kio.process_request(body)
+app.add_api_route("/kio", _kio_endpoint, methods=["POST"], tags=["kio"])
+
+
+# Automation Fabric endpoints
+from fastapi import HTTPException
+
+async def dispatch_automation(request: AutomationRequest):
+    """Trigger an n8n workflow execution."""
+    try:
+        result = await automation_fabric.dispatch(request)
+        return {"status": "dispatched", "result": result}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"n8n dispatch failed: {e}")
+
+async def ingest_automation(payload: dict):
+    """Ingest execution results from n8n back into AURA.
+
+    Accepts optional 'channel' field to route through multi-channel normalizer.
+    Falls back to legacy automation_fabric.ingest_observation for unchannelled payloads.
+    """
+    from app.runtime.context_router import route_external_payload
+    channel = payload.pop("channel", "")
+    if channel:
+        result = await route_external_payload(channel, payload)
+        return {"status": "ingested", "observation_id": result["observation_id"], "channel": result["channel"]}
+    # Legacy path: no channel specified
+    try:
+        # Ingestion performed; event emission removed to avoid invalid EventType
+        observation = await automation_fabric.ingest_observation(
+            payload=payload,
+            session_id=payload.get("session_id", ""),
+        )
+        return {"status": "ingested", "observation": observation}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ingestion failed: {e}")
+
+app.add_api_route("/api/v1/automation/dispatch", dispatch_automation, methods=["POST"], tags=["automation"])
+app.add_api_route("/api/v1/automation/ingest", ingest_automation, methods=["POST"], tags=["automation"])

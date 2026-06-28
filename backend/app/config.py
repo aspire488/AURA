@@ -4,6 +4,19 @@ from urllib.parse import urlparse
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
+    # ponytail: load Docker secret if env var missing
+    def _load_secret(self, name: str) -> str:
+        val = getattr(self, name, None)
+        if val:
+            return val
+        # try Docker secret file
+        secret_path = f"/run/secrets/{name}"  # secrets are named same as env var without prefix
+        try:
+            with open(secret_path) as f:
+                return f.read().strip()
+        except Exception:
+            return ""
+
     model_config = SettingsConfigDict(env_prefix="AURA_", env_file=".env")
 
     version: str = "0.1.0"
@@ -23,15 +36,18 @@ class Settings(BaseSettings):
     openrouter_embedding_model: str = "openai/text-embedding-3-small"
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
 
-    postgres_url: str = ""
+    postgres_url: str = "sqlite+aiosqlite:///./data/aura.db"
     filesystem_root: str = "./data"  # ponytail: use local writable dir
 
+    n8n_webhook_url: str = "http://localhost:5678/webhook"
+
     # Provider resilience. ponytail: comma-separated priority list.
-    provider_priority: str = "openai,openrouter"
+    provider_priority: str = "openai,openrouter,gemini,groq,cerebras,github,gmail,google_calendar,google_drive,discord,telegram,whatsapp,notion,slack,dropbox"
     provider_timeout_seconds: float = 30.0
 
     # Rate limiting
     rate_limit_rpm: int = 60
+    encryption_key: str = ""
 
     def validate_settings(self):
         errors = []

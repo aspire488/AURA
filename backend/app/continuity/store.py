@@ -74,6 +74,13 @@ class ContinuityStore:
             row = result.mappings().first()
             return self._row_to_cont(row) if row else None
 
+    async def count(self) -> int:
+        """Return total number of continuity records."""
+        async with get_session() as session:
+            result = await session.execute(text("SELECT COUNT(*) as cnt FROM continuities"))
+            row = result.mappings().first()
+            return int(row["cnt"]) if row else 0
+
     def _row_to_cont(self, row: dict) -> Continuity:
         return Continuity(
             continuity_id=row["continuity_id"],

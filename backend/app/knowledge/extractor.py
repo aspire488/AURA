@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from typing import Pattern
 
 from app.knowledge.knowledge import Knowledge
 from app.memory.memory import Memory
@@ -8,7 +9,7 @@ from app.memory.memory import Memory
 # ponytail: regex-based extraction. No LLM, no embeddings, deterministic only.
 # Each pattern captures (subject, predicate, object) from memory content.
 
-_PATTERNS: list[tuple[re.Pattern, str, str]] = [
+_PATTERNS: list[tuple[Pattern, str, str]] = [
     # "I use Python" → (identity, uses, Python)
     (re.compile(r"\b(?:I|i)\s+(use|uses|am using)\s+(.+)", re.I), "uses", "identity"),
     # "I am a developer" → (identity, is, developer)

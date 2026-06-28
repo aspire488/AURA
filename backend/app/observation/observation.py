@@ -20,6 +20,8 @@ class ObservationType(str, Enum):
     PROVIDER = "provider"
     REASONING = "reasoning"
     REFLECTION = "reflection"
+    IMPORT = "import"
+    MEDIA = "media"
 
 
 class Observation(BaseModel):

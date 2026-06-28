@@ -26,11 +26,14 @@ class EventType(str, Enum):
     KNOWLEDGE_CREATED = "knowledge_created"
     WORLD_UPDATED = "world_updated"
     BELIEF_UPDATED = "belief_updated"
-    CONFIDENCE_UPDATED = "confidence_updated"
-    OPINION_UPDATED = "opinion_updated"
+    HISTORICAL_IMPORT = "historical_import"
+    # ponytail: removed dead event CONFIDENCE_UPDATED
+    # ponytail: removed dead event OPINION_UPDATED
     GOAL_UPDATED = "goal_updated"
     REASONING_UPDATED = "reasoning_updated"
     REFLECTION_CREATED = "reflection_created"
+    # ponytail: removed dead event OBSERVATION_INGESTED
+    # ponytail: removed dead event CONSTRAINT_VIOLATION
 
 
 class EventMetadata(BaseModel):

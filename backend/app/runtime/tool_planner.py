@@ -71,7 +71,12 @@ def plan_tool(query: str) -> str | None:
     return None
 
 
-def extract_tool_args(tool_name: str, query: str) -> dict:
+from typing import TYPE_CHECKING, Dict, Any
+
+if TYPE_CHECKING:
+    from app.runtime.execution_engine import ExecutionPlan, ExecutionStep
+
+def extract_tool_args(tool_name: str, query: str) -> Dict[str, Any]:
     """Extract arguments for a tool from the query text.
 
     ponytail: regex extraction, no arg parser.
@@ -148,7 +153,7 @@ def classify_plan(query: str) -> str:
     return "single"
 
 
-def create_plan(query: str) -> "ExecutionPlan":
+def create_plan(query: str) -> ExecutionPlan:
     """Build an ExecutionPlan from a query.
 
     Splits on 'then', routes each step to tool or LLM.

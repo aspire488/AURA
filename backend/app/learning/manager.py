@@ -6,15 +6,12 @@ Reflection's strengths/weaknesses into simple lesson strings.
 
 from __future__ import annotations
 
-import time
-
 from app.learning.model import Learning
 from app.learning.store import learning_store
 from app.reflection.reflection import Reflection
 
-
 async def derive_lessons(reflection: Reflection) -> list[str]:
-    """Derive simplistic lessons from a reflection.
+    """Derive simple lessons from a reflection.
     ponytail: concatenate strengths and weaknesses.
     """
     lessons = []
@@ -24,7 +21,6 @@ async def derive_lessons(reflection: Reflection) -> list[str]:
         lessons.append("weaknesses: " + ", ".join(reflection.weaknesses))
     return lessons
 
-
 async def create_from_reflection(reflection: Reflection, **kwargs) -> Learning:
     """Create a learning record for *reflection*.
     ponytail: idempotent – if a record already exists for the same reflection, return it.
@@ -32,7 +28,6 @@ async def create_from_reflection(reflection: Reflection, **kwargs) -> Learning:
     existing = await learning_store.find_by_reflection(reflection.reflection_id)
     if existing:
         return existing
-
     lessons = await derive_lessons(reflection)
     learning = Learning(
         reflection_id=reflection.reflection_id,
@@ -42,10 +37,14 @@ async def create_from_reflection(reflection: Reflection, **kwargs) -> Learning:
     await learning_store.save(learning)
     return learning
 
-
 async def get(learning_id: str) -> Learning | None:
     return await learning_store.get(learning_id)
 
-
 async def list_all(limit: int = 100) -> list[Learning]:
     return await learning_store.list_all(limit)
+
+# placeholder aggregation – returns empty list
+async def aggregate_stable_lessons(threshold: int = 3) -> list[dict]:
+    """Placeholder returns empty list for stable lessons.
+    """
+    return []

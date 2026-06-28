@@ -5,16 +5,20 @@ import uuid
 from typing import Any
 
 from pydantic import BaseModel, Field
+from typing import List, Any
 
 
 class Belief(BaseModel):
-    """What AURA currently accepts as true. ponytail: references WorldEntity IDs, no data duplication."""
+    """Unified belief state with embedded confidence and opinion metrics. ponytail: consolidates three tables into one."""
     belief_id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
-    statement: str = ""  # human-readable claim, e.g. "Alice is a software engineer"
-    entity_ids: list[str] = Field(default_factory=list)  # referenced WorldEntity IDs
-    evidence_knowledge_ids: list[str] = Field(default_factory=list)  # supporting Knowledge IDs
-    evidence_entity_ids: list[str] = Field(default_factory=list)  # supporting WorldEntity IDs
-    state: str = "active"  # active | inactive
+    statement: str = ""
+    entity_ids: List[str] = Field(default_factory=list)
+    evidence_knowledge_ids: List[str] = Field(default_factory=list)
+    evidence_entity_ids: List[str] = Field(default_factory=list)
+    evidence_observation_ids: List[str] = Field(default_factory=list)
+    confidence_value: float = Field(default=1.0, ge=0.0, le=1.0)
+    opinion_value: float = Field(default=0.0, ge=0.0, le=1.0)
+    state: str = "active"  # active | consolidated | historical
     created_at: float = Field(default_factory=time.time)
     updated_at: float = Field(default_factory=time.time)
     metadata: dict[str, Any] = Field(default_factory=dict)

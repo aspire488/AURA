@@ -41,6 +41,40 @@ async def detect_orphan_relationships() -> List[Dict[str, Any]]:
             orphans.append(r)
     return orphans
 
+# ---- Repair actions -------------------------------------------------------
+
+async def repair_orphan_relationships() -> None:
+    """Delete relationships referencing missing identities."""
+    async with get_session() as session:
+        await session.execute(
+            text(
+                "DELETE FROM relationships WHERE source_identity NOT IN (SELECT identity_id FROM identities) OR target_identity NOT IN (SELECT identity_id FROM identities)"
+            )
+        )
+        await session.commit()
+
+async def repair_duplicate_identities() -> None:
+    """Keep one identity per display_name, delete extras."""
+    # Find duplicates
+    dup_rows = await _fetch_all(
+        "SELECT display_name, array_agg(identity_id) AS ids FROM identities GROUP BY display_name HAVING count(*) > 1"
+    )
+    async with get_session() as session:
+        for row in dup_rows:
+            ids = json.loads(row["ids"]) if isinstance(row["ids"], str) else row["ids"]
+            # keep first, delete rest
+            to_delete = ids[1:]
+            for did in to_delete:
+                await session.execute(text("DELETE FROM identities WHERE identity_id = :did"), {"did": did})
+        await session.commit()
+
+async def cleanup_stalled_imports(days_threshold: int = 30) -> None:
+    """Delete import records older than threshold days."""
+    cutoff = time.time() - days_threshold * 86400
+    async with get_session() as session:
+        await session.execute(text("DELETE FROM imports WHERE timestamp < :cutoff"), {"cutoff": cutoff})
+        await session.commit()
+
 
 async def detect_duplicate_identities() -> List[Dict[str, Any]]:
     """Return groups of identities sharing the same display_name.

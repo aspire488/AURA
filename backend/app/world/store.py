@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 
 from sqlalchemy import text
 
 from app.world.models import WorldEntity, WorldRelation, WorldAttribute
 from app.substrate.postgres.client import get_session
+from sqlalchemy.engine.row import RowMapping
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +101,26 @@ class WorldModelStore:
             row = result.mappings().first()
             return self._row_to_entity(row) if row else None
 
+    async def get_entity_network(self, entity_id: str) -> dict:
+        """Return the entity and its immediate incoming/outgoing relations.
+        ponytail: single query per direction, minimal processing.
+        """
+        async with get_session() as session:
+            # fetch entity
+            ent_res = await session.execute(text("SELECT * FROM world_entities WHERE entity_id = :id"), {"id": entity_id})
+            ent_row = ent_res.mappings().first()
+            if not ent_row:
+                return {}
+            entity = self._row_to_entity(ent_row)
+            # outgoing relations
+            out_res = await session.execute(text("SELECT * FROM world_relations WHERE source_entity = :id"), {"id": entity_id})
+            outgoing = [self._row_to_relation(r) for r in out_res.mappings()]
+            # incoming relations
+            in_res = await session.execute(text("SELECT * FROM world_relations WHERE target_entity = :id"), {"id": entity_id})
+            incoming = [self._row_to_relation(r) for r in in_res.mappings()]
+            return {"entity": entity, "outgoing": outgoing, "incoming": incoming}
+
+
     async def find_entity_by_name(self, name: str) -> WorldEntity | None:
         """Find exact name match. ponytail: case-insensitive via LOWER."""
         async with get_session() as session:
@@ -127,6 +149,17 @@ class WorldModelStore:
                 )
             return [self._row_to_entity(row) for row in result.mappings()]
 
+    def _row_to_entity(self, row: RowMapping) -> WorldEntity:
+        return WorldEntity(
+            entity_id=row["entity_id"],
+            name=row.get("name", ""),
+            entity_type=row.get("entity_type", "concept"),
+            aliases=json.loads(row["aliases"]) if isinstance(row.get("aliases"), str) else (row.get("aliases") or []),
+            created_at=row["created_at"],
+            updated_at=row.get("updated_at", row["created_at"]),
+            metadata=json.loads(row["metadata"]) if isinstance(row.get("metadata"), str) else (row.get("metadata") or {}),
+        )
+
     async def delete_entity(self, entity_id: str) -> None:
         try:
             async with get_session() as session:
@@ -137,7 +170,7 @@ class WorldModelStore:
         except Exception:
             logger.exception("Failed to delete world entity %s", entity_id)
 
-    def _row_to_entity(self, row: dict) -> WorldEntity:
+
         return WorldEntity(
             entity_id=row["entity_id"],
             name=row.get("name", ""),
@@ -165,15 +198,15 @@ class WorldModelStore:
                     ),
                     {
                         "id": rel.relation_id,
-                        "src": rel.source_entity,
-                        "tgt": rel.target_entity,
-                        "type": rel.relation_type,
-                        "conf": rel.confidence,
-                        "ev": rel.evidence_count,
-                        "kids": json.dumps(rel.source_knowledge_ids),
-                        "created": rel.created_at,
-                        "updated": rel.updated_at,
-                        "meta": json.dumps(rel.metadata),
+                        "src": getattr(rel, "source_entity", getattr(rel, "subject_id", None)),
+                        "tgt": getattr(rel, "target_entity", getattr(rel, "object_id", None)),
+                        "type": getattr(rel, "relation_type", getattr(rel, "predicate", None)),
+                        "conf": getattr(rel, "confidence", 1.0),
+                        "ev": getattr(rel, "evidence_count", 1),
+                        "kids": json.dumps(getattr(rel, "source_knowledge_ids", [])),
+                        "created": getattr(rel, "created_at", time.time()),
+                        "updated": getattr(rel, "updated_at", time.time()),
+                        "meta": json.dumps(getattr(rel, "metadata", {})),
                     },
                 )
                 await session.commit()
@@ -237,7 +270,7 @@ class WorldModelStore:
             logger.exception("Failed to redirect relations from %s", old_entity_id)
             return 0
 
-    def _row_to_relation(self, row: dict) -> WorldRelation:
+    def _row_to_relation(self, row: RowMapping) -> WorldRelation:
         return WorldRelation(
             relation_id=row["relation_id"],
             source_entity=row["source_entity"],
@@ -323,7 +356,7 @@ class WorldModelStore:
             result = await session.execute(text("SELECT COUNT(*) as cnt FROM world_relations"))
             return result.scalar() or 0
 
-    def _row_to_attribute(self, row: dict) -> WorldAttribute:
+    def _row_to_attribute(self, row: RowMapping) -> WorldAttribute:
         return WorldAttribute(
             attribute_id=row["attribute_id"],
             entity_id=row["entity_id"],

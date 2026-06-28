@@ -10,8 +10,6 @@ from typing import List
 
 from app.reflection.reflection import Reflection
 from app.reflection.store import reflection_store
-from app.substrate.postgres.client import get_session
-# Import directly to avoid circular import
 from app.planning.store import plan_store
 
 # CRUD ---------------------------------------------------------------------
@@ -38,6 +36,7 @@ async def create(
         metadata=kwargs.get("metadata", {}),
     )
     await reflection_store.save(reflection)
+    
     return reflection
 
 async def get(reflection_id: str) -> Reflection | None:
@@ -71,6 +70,7 @@ async def refresh_for_plan(plan_id: str) -> Reflection:
         reflection = existing[0]
         reflection.updated_at = time.time()
         await reflection_store.save(reflection)
+        
         return reflection
     # create new
     plan = await plan_store.get(plan_id)

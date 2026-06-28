@@ -52,6 +52,7 @@ async def dispatch_agent(name: str, payload: Any, *, timeout: float | None = Non
     """
     if name not in _agent_registry:
         raise KeyError(f"Agent {name} not registered")
+    _metrics["dispatch_total"] += 1
     handler = _agent_registry[name]
     async def _run() -> Any:
         result = handler(payload)

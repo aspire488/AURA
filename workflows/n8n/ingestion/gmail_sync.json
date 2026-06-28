@@ -1,0 +1,59 @@
+{
+  "nodes": [
+    {
+      "id": "hourlyTrigger",
+      "name": "Hourly Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "parameters": {"cronExpression": "0 * * * *", "timeZone": "UTC"},
+      "startNode": true
+    },
+    {
+      "id": "gmailFetch",
+      "name": "Fetch Gmail",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "parameters": {
+        "url": "https://gmail.googleapis.com/gmail/v1/users/me/messages",
+        "method": "GET",
+        "headerParametersJson": "{\"Authorization\": \"Bearer {{ $env.GMAIL_TOKEN }}\"}",
+        "responseFormat": "json",
+        "options": {"retries": 3, "retryDelay": 3000, "timeout": 30}
+      }
+    },
+    {
+      "id": "postIngest",
+      "name": "Post to Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "parameters": {
+        "url": "http://localhost:8000/api/v1/automation/ingest",
+        "method": "POST",
+        "jsonParameters": true,
+        "bodyParametersJson": "{{ $json }}",
+        "options": {"retries": 3, "retryDelay": 2000, "timeout": 20}
+      }
+    },
+    {
+      "id": "slackNotify",
+      "name": "Slack Notify",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "channel": "#aura-gmail",
+        "text": "Fetched {{ $json.resultSizeEstimate || 0 }} Gmail messages.",
+        "options": {"retries": 2, "retryDelay": 2000, "timeout": 10}
+      }
+    }
+  ],
+  "connections": {
+    "hourlyTrigger": [{"node": "gmailFetch", "type": "main", "index": 0}],
+    "gmailFetch": [{"node": "postIngest", "type": "main", "index": 0}],
+    "postIngest": [{"node": "slackNotify", "type": "main", "index": 0}]
+  },
+  "name": "Gmail Sync",
+  "active": true,
+  "settings": {"workflowMetaData": {"id": "GMAIL_SYNC", "name": "Gmail Sync", "description": "Pulls Gmail messages and ingests into AURA.", "version": 1}}
+}
