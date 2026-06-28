@@ -56,17 +56,20 @@ async def _check_and_refresh(name: str, info) -> None:
             if not refreshed:
                 info.last_error = "token refresh failed"
                 info.revoked = True
-                await emit("integration_failure", source="health", payload={"provider": name, "reason": info.last_error})
+                # ponytail: removed obsolete integration_failure event
+# await emit("integration_failure", source="health", payload={"provider": name, "reason": info.last_error})
     # ping provider health endpoint
     ping = await _ping_provider(name, info)
     if ping.get("status") == "up":
         info.latency_ms = ping.get("latency_ms")
         info.last_error = None
         info.revoked = False
-        await emit("integration_health", source="health", payload={"provider": name, "status": "up", "latency_ms": info.latency_ms})
+        # ponytail: removed obsolete integration_health event
+# await emit("integration_health", source="health", payload={"provider": name, "status": "up", "latency_ms": info.latency_ms})
     else:
         info.last_error = ping.get("error")
-        await emit("integration_health", source="health", payload={"provider": name, "status": ping.get("status"), "error": info.last_error})
+        # ponytail: removed obsolete integration_health event
+# await emit("integration_health", source="health", payload={"provider": name, "status": ping.get("status"), "error": info.last_error})
 
 
 async def _monitor_loop() -> None:

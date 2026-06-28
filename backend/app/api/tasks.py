@@ -45,7 +45,8 @@ async def cancel_task(task_id: str):
         raise HTTPException(status_code=404, detail="Task not found")
     metrics.record_task_cancelled()
     from app.main import emit  # lazy import
-    await emit("task_completed", source="api/tasks", payload={"task_id": task_id, "success": False, "cancelled": True})
+    from app.events import EventType
+    await emit(EventType.TASK_COMPLETED, source="api/tasks", payload={"task_id": task_id, "success": False, "cancelled": True})
     return TaskResponse(**task.__dict__)
 
 

@@ -1,5 +1,6 @@
 import logging
 import time
+from app.events.event import EventType
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -111,63 +112,83 @@ async def lifespan(app: FastAPI):
             capabilities=[],
         )
 
-    # Initialise persistent credential store
+    # -------------------
+    # PHASE 1 – Infrastructure
+    # -------------------
+    # Settings have already been validated (lines 81‑85).
+    # Initialise PostgreSQL engine & Redis pool via substrate.
+    await initialize_substrate(app)
+    # EventBus is created earlier; start it so DLQ handling works but do NOT emit
+    # any application events yet.
+    from app.events import bus as event_bus
+    await event_bus.start()
+    # Initialise credential store (Docker secret handling).
     from app.integrations.credential_store import credential_store
     await credential_store.init()
-    await initialize_substrate(app)
 
-    from app.events import init_events, event_store
-    from app.events import bus as event_bus
-    init_events()
-    await event_store.initialize()
-    await event_bus.start()
-
+    # -------------------
+    # PHASE 2 – Persistent stores
+    # -------------------
+    # Initialise all stores that persist data.  If any .initialize() raises the
+    # exception propagates and the process aborts – the server never reaches READY.
     from app.identity.store import identity_store
-    await identity_store.initialize()
-
     from app.observation.store import observation_store
-    await observation_store.initialize()
-
     from app.memory.store import memory_store
-    await memory_store.initialize()
-
     from app.knowledge.store import knowledge_store
-    await knowledge_store.initialize()
-
     from app.world.store import world_store
-    await world_store.initialize()
-
     from app.belief.store import belief_store
-    await belief_store.initialize()
     from app.confidence.store import confidence_store
-    await confidence_store.initialize()
     from app.goal.store import goal_store
-    await goal_store.initialize()
-    # ponytail: Recover active goals on startup – emit goal_created for each
-    from app.goal.store import goal_store as _gs
-    active_goals = await _gs.list_all(status="active")
-    for _g in active_goals:
-        await emit("goal_created", session_id=_g.goal_id, source="recovery", payload=_g.model_dump())
+    from app.oracle.store import decision_store
     from app.reasoning.store import reasoning_store
-    await reasoning_store.initialize()
     from app.opinion.store import opinion_store
     from app.reflection.store import reflection_store
+    from app.learning.store import learning_store
+    from app.continuity.store import continuity_store
+    from app.events import event_store, init_events
+
+    # Register event subscribers (no events emitted yet).
+    init_events()
+    await event_store.initialize()
+
+    # Initialise stores in logical order.
+    await identity_store.initialize()
+    await observation_store.initialize()
+    await memory_store.initialize()
+    await knowledge_store.initialize()
+    await world_store.initialize()
+    await belief_store.initialize()
+    await confidence_store.initialize()
+    await goal_store.initialize()
+    await decision_store.initialize()   # creates the "decisions" table before recovery events
+    await reasoning_store.initialize()
     await opinion_store.initialize()
     await reflection_store.initialize()
-    from app.learning.store import learning_store
     await learning_store.initialize()
-
-    from app.continuity.store import continuity_store
     await continuity_store.initialize()
 
-    # Initialize embedding provider at startup (pony tail)
+    # -------------------
+    # PHASE 3 – Recovery & event emission
+    # -------------------
+    # Recover persisted state (active goals, pending tasks, conversations, …).
+    active_goals = await goal_store.list_all(status="active")
+    logger.info(f"Recovery – emitting GOAL_UPDATED for {len(active_goals)} active goals @ {__import__('datetime').datetime.utcnow().isoformat()}")
+    for _g in active_goals:
+        await emit(EventType.GOAL_UPDATED, session_id=_g.goal_id, source="recovery", payload=_g.model_dump())
+    # TODO: recover pending tasks, conversations, etc.
+
+    # -------------------
+    # PHASE 4 – Runtime services
+    # -------------------
+    # Initialise embedding provider (may contact external APIs).
     from app.providers.factory import get_provider
     _provider = get_provider()
     await _provider.embed(["init"])
     logger.info("AURA started, version=%s", settings.version)
-    # Initialize Agent Layer
+    # Initialise Agent Layer (bootstrap agents, start background workers, scheduler).
     from app.agents.bootstrap import _lifecycle_manager as _agent_lifecycle
     await _agent_lifecycle.initialize_all()
+    # Server is now READY – FastAPI will start handling requests.
     yield
     # Graceful shutdown
     logger.info("AURA shutting down")

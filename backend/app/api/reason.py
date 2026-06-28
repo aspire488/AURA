@@ -16,11 +16,12 @@ router = APIRouter(tags=["reasoning"])
 
 @router.post("/reason")
 async def reason_endpoint(body: ReasonRequest, request: Request):
-    from app.main import emit  # lazy import to avoid circular
+    from app.main import emit  # lazy import
+    from app.events import EventType  # lazy import
     session_id = body.session_id
     session_id_var.set(session_id)
 
-    await emit("user_message_received", session_id=session_id, source="api/reason", payload={"query": body.query})
+    await emit(EventType.USER_MESSAGE_RECEIVED, session_id=session_id, source="api/reason", payload={"query": body.query})
 
     # Streaming path
     if body.stream:
@@ -45,7 +46,7 @@ async def reason_endpoint(body: ReasonRequest, request: Request):
         status = TaskStatus.deferred if plan_type == "deferred" else TaskStatus.running
         task = await tm.create(session_id=session_id or "anon", query=body.query, steps=steps, status=status)
         metrics.record_task_created()
-        await emit("task_created", session_id=session_id, source="api/reason", payload={"task_id": task.task_id, "query": body.query})
+        await emit(EventType.TASK_CREATED, session_id=session_id, source="api/reason", payload={"task_id": task.task_id, "query": body.query})
         if session_id:
             await agent.set_task(session_id, task.task_id)
             await agent.set_reasoning_mode(session_id, plan_type)
@@ -61,7 +62,7 @@ async def reason_endpoint(body: ReasonRequest, request: Request):
             session_id=session_id, task_id=task.task_id,
         )
 
-    await emit("reasoning_started", session_id=session_id, source="api/reason", payload={"task_id": task.task_id})
+    await emit(EventType.REASONING_STARTED, session_id=session_id, source="api/reason", payload={"task_id": task.task_id})
 
     # Execute through KIO pipeline (handles multi-step via execution engine)
     start = time.perf_counter()
@@ -85,15 +86,15 @@ async def reason_endpoint(body: ReasonRequest, request: Request):
     if result.execution_trace and any(t.get("status") == "failed" for t in result.execution_trace):
         await tm.fail(task.task_id, error="step failed")
         metrics.record_task_completed(latency_ms, 0)
-        await emit("task_completed", session_id=session_id, source="api/reason", payload={"task_id": task.task_id, "success": False})
+        await emit(EventType.TASK_COMPLETED, session_id=session_id, source="api/reason", payload={"task_id": task.task_id, "success": False})
     else:
         await tm.complete(task.task_id, result=result.answer)
         tools_used = len(result.execution_trace)
         metrics.record_task_completed(latency_ms, tools_used)
-        await emit("task_completed", session_id=session_id, source="api/reason", payload={"task_id": task.task_id, "success": True, "tools_used": tools_used})
+        await emit(EventType.TASK_COMPLETED, session_id=session_id, source="api/reason", payload={"task_id": task.task_id, "success": True, "tools_used": tools_used})
 
-    await emit("reasoning_completed", session_id=session_id, source="api/reason", payload={"task_id": task.task_id, "latency_ms": latency_ms})
-    await emit("assistant_response_generated", session_id=session_id, source="api/reason", payload={"task_id": task.task_id, "answer_length": len(result.answer)})
+    await emit(EventType.REASONING_COMPLETED, session_id=session_id, source="api/reason", payload={"task_id": task.task_id, "latency_ms": latency_ms})
+    await emit(EventType.ASSISTANT_RESPONSE_GENERATED, session_id=session_id, source="api/reason", payload={"task_id": task.task_id, "answer_length": len(result.answer)})
 
     return ReasonResponse(
         intent=result.intent,

@@ -106,7 +106,6 @@ async def process_event(event: BaseEvent) -> None:
         EventType.CODE_EXECUTED,
         EventType.REFLECTION_CREATED,
         EventType.GOAL_UPDATED,
-        EventType.OBSERVATION_INGESTED,
         EventType.KNOWLEDGE_CREATED,
     }
     if event.event_type in strategic:
@@ -136,7 +135,7 @@ async def _trigger_knowledge_growth_goal(value: float) -> None:
     )
     await goal_store.save(goal)
     from app.main import emit
-    await emit("goal_created", session_id="strategic", source="strategic_intelligence", payload=goal.model_dump())
+    await emit(EventType.GOAL_UPDATED, session_id="strategic", source="strategic_intelligence", payload=goal.model_dump())
 
 async def _trigger_goal_momentum_goal(value: float) -> None:
     """Create a goal when goal momentum exceeds threshold."""
@@ -155,7 +154,7 @@ async def _trigger_goal_momentum_goal(value: float) -> None:
     )
     await goal_store.save(goal)
     from app.main import emit
-    await emit("goal_created", session_id="strategic", source="strategic_intelligence", payload=goal.model_dump())
+    await emit(EventType.GOAL_UPDATED, session_id="strategic", source="strategic_intelligence", payload=goal.model_dump())
 
 async def _trigger_relationship_strength_action(value: float) -> None:
     """Invoke stewardship repair on relationship issues when strength high."""

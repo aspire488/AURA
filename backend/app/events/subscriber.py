@@ -88,6 +88,7 @@ class GoalUpdatedSubscriber:
 
 class ReasoningUpdatedSubscriber:
     async def __call__(self, event: BaseEvent) -> None:
+        logger.info(f"ReasoningUpdatedSubscriber START @ {__import__('datetime').datetime.utcnow().isoformat()}")
         # Create a reasoning record linking latest goal (existing behavior)
         from app.goal.store import goal_store
         from app.reasoning.manager import create as create_reasoning

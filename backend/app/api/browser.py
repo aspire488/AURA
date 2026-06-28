@@ -40,5 +40,6 @@ async def browser_execute(body: BrowserExecuteRequest):
     latency_ms = round((time.perf_counter() - start) * 1000, 2)
     metrics.record_browser(latency_ms, result.get("success", False))
     from app.main import emit  # lazy import
-    await emit("browser_action", source="api/browser", payload={"action": body.action, "success": result.get("success", False), "latency_ms": latency_ms})
+    from app.events import EventType
+    await emit(EventType.BROWSER_ACTION, source="api/browser", payload={"action": body.action, "success": result.get("success", False), "latency_ms": latency_ms})
     return BrowserExecuteResponse(success=result.get("success", False), result=result)

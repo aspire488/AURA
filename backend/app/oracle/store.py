@@ -35,18 +35,16 @@ class DecisionStore:
     """Raw‑SQL store for Decision records. ponytail: mirror other stores."""
 
     async def initialize(self) -> None:
-        try:
-            async with get_session() as session:
-                for stmt in CREATE_DECISION_TABLE.strip().split(";"):
-                    stmt = stmt.strip()
-                    if stmt:
-                        await session.execute(text(stmt))
-                await session.commit()
-            logger.info("Decision table ready")
-        except Exception:
-            logger.exception("Failed to initialize decision table")
+        async with get_session() as session:
+            for stmt in CREATE_DECISION_TABLE.strip().split(";"):
+                stmt = stmt.strip()
+                if stmt:
+                    await session.execute(text(stmt))
+            await session.commit()
+        logger.info("Decision table ready")
 
     async def save(self, decision: Decision) -> None:
+        logger.info(f"DecisionStore.save() START @ {__import__('datetime').datetime.utcnow().isoformat()}")
         try:
             async with get_session() as session:
                 await session.execute(
@@ -76,11 +74,22 @@ class DecisionStore:
 
     async def get(self, decision_id: str) -> Decision | None:
         async with get_session() as session:
-            result = await session.execute(
-                text("SELECT * FROM decisions WHERE decision_id = :did"), {"did": decision_id}
-            )
-            row = result.mappings().first()
-            return self._row_to_decision(row) if row else None
+            try:
+                result = await session.execute(
+                    text("SELECT * FROM decisions WHERE decision_id = :did"), {"did": decision_id}
+                )
+                row = result.mappings().first()
+                return self._row_to_decision(row) if row else None
+            except Exception as e:
+                if "relation \"decisions\" does not exist" in str(e):
+                    await self.initialize()
+                    # retry once
+                    result = await session.execute(
+                        text("SELECT * FROM decisions WHERE decision_id = :did"), {"did": decision_id}
+                    )
+                    row = result.mappings().first()
+                    return self._row_to_decision(row) if row else None
+                raise
 
     async def list_all(self, state: str = "", limit: int = 100) -> List[Decision]:
         async with get_session() as session:

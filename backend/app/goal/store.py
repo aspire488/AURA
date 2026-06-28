@@ -102,7 +102,7 @@ class GoalStore:
             return []
         async with get_session() as session:
             result = await session.execute(
-                text("SELECT * FROM goals WHERE status IN :statuses ORDER BY priority DESC, created_at DESC LIMIT :limit"),
+                text("SELECT * FROM goals WHERE status = ANY(:statuses) ORDER BY priority DESC, created_at DESC LIMIT :limit"),
                 {"statuses": tuple(statuses), "limit": limit},
             )
             return [self._row_to_goal(row) for row in result.mappings()]

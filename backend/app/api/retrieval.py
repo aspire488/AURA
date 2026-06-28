@@ -28,7 +28,8 @@ async def query_endpoint(
     embeddings = await provider.embed([body.query])
     results = chroma.query(embeddings[0], top_k=body.top_k)
     from app.main import emit  # lazy import
-    await emit("memory_retrieved", source="api/retrieval", payload={"query": body.query[:100], "result_count": len(results)})
+    from app.events import EventType
+    await emit(EventType.MEMORY_RETRIEVED, source="api/retrieval", payload={"query": body.query[:100], "result_count": len(results)})
     return QueryResponse(results=[QueryResult(**r) for r in results])
 
 

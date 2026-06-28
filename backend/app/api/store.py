@@ -104,7 +104,8 @@ async def store_memory(
     metrics.record_store(is_duplicate=False)
     metrics.record_memory_created(importance)
     from app.main import emit  # lazy import
-    await emit("memory_stored", source="api/store", payload={"memory_type": memory_type.value, "importance": importance, "role": body.role, "content": content})
+    from app.events import EventType
+    await emit(EventType.MEMORY_STORED, source="api/store", payload={"memory_type": memory_type.value, "importance": importance, "role": body.role, "content": content})
     return StoreResponse(status="stored", memory_type=memory_type.value, importance=round(importance * 100))
 
 

@@ -10,6 +10,7 @@ from app.config import settings
 # ponytail: emit imported lazily
 
 logger = logging.getLogger(__name__)
+from app.events import EventType
 
 
 @dataclass
@@ -53,13 +54,13 @@ class ProviderGateway:
                     provider_name, system_prompt, user_prompt, model, temperature, max_tokens
                 )
                 from app.main import emit  # lazy import
-                await emit("provider_invoked", source="provider_gateway", payload={"provider": provider_name, "model": result.model, "latency_ms": result.latency_ms, "prompt_tokens": result.prompt_tokens, "completion_tokens": result.completion_tokens})
+                await emit(EventType.PROVIDER_INVOKED, source="provider_gateway", payload={"provider": provider_name, "model": result.model, "latency_ms": result.latency_ms, "prompt_tokens": result.prompt_tokens, "completion_tokens": result.completion_tokens})
                 return result
             except Exception as e:
                 self._provider_failures[provider_name] = self._provider_failures.get(provider_name, 0) + 1
                 self._provider_fallbacks += 1
                 from app.main import emit  # lazy import
-                await emit("provider_failed", source="provider_gateway", payload={"provider": provider_name, "error": str(e)})
+                await emit(EventType.PROVIDER_FAILED, source="provider_gateway", payload={"provider": provider_name, "error": str(e)})
                 logger.warning("Provider %s failed: %s, trying next", provider_name, e)
                 errors.append(f"{provider_name}: {e}")
         raise RuntimeError(f"All providers failed: {'; '.join(errors)}")

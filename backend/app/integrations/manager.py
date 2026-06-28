@@ -39,7 +39,7 @@ class ProviderInfo:
     def to_status(self) -> Dict[str, Any]:
         return {
             "name": self.name,
-            "authenticated": not self.revoked,
+            # ponytail: authenticated derived from state only, removed here
             "last_refresh": self.last_refresh,
             "last_error": self.last_error,
             "scopes": self.scopes,
@@ -98,8 +98,9 @@ class IntegrationManager:
             status = p.to_status()
             state_obj = self._states.get(name)
             authenticated = False
-            if state_obj in (IntegrationState.CONNECTED, IntegrationState.ACTIVE):
-                authenticated = not p.revoked
+            # Authenticated only when in allowed states per invariant B
+            if state_obj in (IntegrationState.CONNECTED, IntegrationState.HEALTHY, IntegrationState.ACTIVE):
+                authenticated = True
             status.update({
                 "state": state_obj.value if state_obj else None,
                 "authenticated": authenticated,
