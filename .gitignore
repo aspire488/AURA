@@ -52,3 +52,4 @@ __pycache__/
 *.pyc
 .env
 .env.*
+aura.db
